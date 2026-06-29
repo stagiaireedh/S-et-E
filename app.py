@@ -54,6 +54,18 @@ def create_app():
                 migrate_with_app(app)
             except Exception as migration_error:
                 app.logger.error(f"Erreur lors de la migration des blocs : {migration_error}")
+            
+            # Seeding automatique : créer l'utilisateur démo s'il n'existe pas
+            try:
+                demo_email = "demo@example.com"
+                if not User.query.filter_by(email=demo_email).first():
+                    demo_password_hash = bcrypt.hashpw("demo123".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                    demo_user = User(username="demo", email=demo_email, password_hash=demo_password_hash)
+                    db.session.add(demo_user)
+                    db.session.commit()
+                    app.logger.info("Utilisateur démo créé automatiquement (demo@example.com / demo123).")
+            except Exception as seed_error:
+                app.logger.warning(f"Seeding utilisateur démo ignoré : {seed_error}")
         except Exception as e:
             app.logger.error(f"Erreur d'initialisation automatique de la base : {e}")
 

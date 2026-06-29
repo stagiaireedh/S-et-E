@@ -194,6 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const saisieQuestionnaireId = document.getElementById('saisie-questionnaire-id');
     const dynamicQuestionsContainer = document.getElementById('dynamic-questions-container');
     const btnSubmitSaisie = document.getElementById('btn-submit-saisie');
+    const btnEditActiveQuest = document.getElementById('btn-edit-active-questionnaire');
 
     // --- 1. GESTION DES ONGLETS ---
     function switchTab(tabId) {
@@ -1031,7 +1032,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const builderCanvas = document.getElementById('builder-canvas-area');
     const builderSavedBlocksContainer = document.getElementById('builder-saved-blocks-container');
     const propertiesPanelContent = document.getElementById('properties-panel-content');
-    const btnEditActiveQuest = document.getElementById('btn-edit-active-questionnaire');
     
     // Variables locales pour le builder
     let activeBuilderQuestionnaireId = null;
