@@ -25,6 +25,78 @@ def create_app():
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         os.makedirs(app.config['UPLOAD_FOLDER'])
         
+    # Auto-création des tables et chargement des données de démonstration (seeding)
+    with app.app_context():
+        try:
+            db.create_all()
+            if Project.query.count() == 0:
+                from datetime import date
+                project = Project(
+                    name="Projet d'Accès à l'Eau Potable et Assainissement (AEPA)",
+                    description=(
+                        "Ce projet vise à améliorer durablement l'accès à l'eau potable et aux infrastructures d'assainissement "
+                        "de base pour 15 000 personnes vivant dans les zones rurales de la commune de Gandon. Il s'appuie sur la "
+                        "construction de 5 forages solaires, l'installation de bornes-fontaines et le renforcement des capacités des "
+                        "comités locaux de gestion de l'eau (ASUFOR)."
+                    )
+                )
+                db.session.add(project)
+                db.session.flush()
+                
+                questionnaire = Questionnaire(
+                    project_id=project.id,
+                    title="Évaluation Intermédiaire - Projet AEPA",
+                    description="Questionnaire destiné à évaluer l'accès, le fonctionnement, la gestion financière et la satisfaction après 12 mois de mise en œuvre."
+                )
+                db.session.add(questionnaire)
+                db.session.flush()
+                
+                q1 = Question(questionnaire_id=questionnaire.id, text="Quelle est votre appréciation globale de la disponibilité et de la qualité de l'eau potable ?", question_type="select", choices="Excellent, Bon, Moyen, Mauvais", order_num=1)
+                q2 = Question(questionnaire_id=questionnaire.id, text="Quels sont les principaux changements constatés dans votre vie quotidienne (santé, temps de trajet, économies) ?", question_type="text", order_num=2)
+                q3 = Question(questionnaire_id=questionnaire.id, text="Avez-vous rencontré des difficultés techniques ou des pannes récurrentes avec les nouvelles installations ?", question_type="text", order_num=3)
+                q4 = Question(questionnaire_id=questionnaire.id, text="Selon vous, le comité de gestion local gère-t-il les cotisations et les installations de manière transparente ?", question_type="select", choices="Oui tout à fait, Oui partiellement, Non pas du tout", order_num=4)
+                q5 = Question(questionnaire_id=questionnaire.id, text="Quelles sont vos recommandations prioritaires pour garantir la durabilité du service d'eau ?", question_type="text", order_num=5)
+                db.session.add_all([q1, q2, q3, q4, q5])
+                db.session.flush()
+                
+                s1 = InterviewSession(
+                    project_id=project.id, questionnaire_id=questionnaire.id,
+                    title="Focus Group - Femmes du quartier Nord", interviewer="Sophie Diouf (Évaluatrice)",
+                    interviewee_name_or_group="Groupe de discussion (12 femmes)", actor_category="Bénéficiaire",
+                    session_type="collectif", interview_date=date(2026, 6, 10)
+                )
+                db.session.add(s1)
+                db.session.flush()
+                db.session.add_all([
+                    Answer(session_id=s1.id, question_id=q1.id, answer_text="Moyen"),
+                    Answer(session_id=s1.id, question_id=q2.id, answer_text="La qualité de l'eau est très bonne et les enfants ne tombent plus malades de la diarrhée. C'est un grand changement positif pour la santé de nos familles."),
+                    Answer(session_id=s1.id, question_id=q3.id, answer_text="Oui, nous rencontrons des pannes récurrentes de la pompe solaire ces derniers temps. Quand elle tombe en panne, le réparateur prend plus d'une semaine pour venir car il manque de pièces de rechange."),
+                    Answer(session_id=s1.id, question_id=q4.id, answer_text="Oui partiellement"),
+                    Answer(session_id=s1.id, question_id=q5.id, answer_text="Il faut absolument former un technicien local résidant dans le village et lui donner une caisse d'outils.")
+                ])
+                
+                s2 = InterviewSession(
+                    project_id=project.id, questionnaire_id=questionnaire.id,
+                    title="Entretien individuel - M. Amadou Diallo (Maraîcher)", interviewer="Sophie Diouf (Évaluatrice)",
+                    interviewee_name_or_group="Amadou Diallo", actor_category="Bénéficiaire",
+                    session_type="individuel", interview_date=date(2026, 6, 12)
+                )
+                db.session.add(s2)
+                db.session.flush()
+                db.session.add_all([
+                    Answer(session_id=s2.id, question_id=q1.id, answer_text="Excellent"),
+                    Answer(session_id=s2.id, question_id=q2.id, answer_text="Grâce à la borne-fontaine installée près de mes parcelles, j'ai pu augmenter ma production de salades et de tomates. Mes revenus ont augmenté de 30%."),
+                    Answer(session_id=s2.id, question_id=q3.id, answer_text="Pas de panne majeure de mon côté, mais la pression de l'eau baisse beaucoup en fin d'après-midi."),
+                    Answer(session_id=s2.id, question_id=q4.id, answer_text="Oui tout à fait"),
+                    Answer(session_id=s2.id, question_id=q5.id, answer_text="Il faudrait ajouter un deuxième réservoir de stockage d'eau.")
+                ])
+                db.session.commit()
+                app.logger.info("Base de données initialisée et ensemencée (seeding) automatiquement.")
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f"Erreur d'initialisation automatique de la base : {e}")
+
+        
     # --- ROUTES FRONTEND ---
     @app.route('/')
     def index():

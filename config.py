@@ -19,12 +19,16 @@ class Config:
     # Chemin absolu du dossier racine du projet
     BASE_DIR = os.path.abspath(os.path.dirname(__file__))
     
-    # Configuration de la base de données SQLite
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(BASE_DIR, 'suivi_evaluation.db')
+    # Configuration de la base de données SQLite et dossier d'uploads (utilisation de /tmp sur Vercel)
+    if os.environ.get('VERCEL_ENV') or os.environ.get('VERCEL'):
+        SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join('/tmp', 'suivi_evaluation.db')
+        UPLOAD_FOLDER = os.path.join('/tmp', 'uploads')
+    else:
+        SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(BASE_DIR, 'suivi_evaluation.db')
+        UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+        
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    
-    # Configuration du dossier d'upload pour les pièces jointes
-    UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+
     
     # Taille maximale autorisée pour les fichiers (16 Mo)
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024
