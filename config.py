@@ -19,12 +19,23 @@ class Config:
     # Chemin absolu du dossier racine du projet
     BASE_DIR = os.path.abspath(os.path.dirname(__file__))
     
-    # Configuration de la base de données SQLite et dossier d'uploads (utilisation de /tmp sur Vercel)
+    # Configuration de la base de données (Neon PostgreSQL en production, SQLite en local)
+    db_url = os.environ.get('DATABASE_URL')
+    if db_url:
+        # Convertir postgres:// en postgresql:// (requis pour SQLAlchemy >= 1.4)
+        if db_url.startswith("postgres://"):
+            db_url = db_url.replace("postgres://", "postgresql://", 1)
+        SQLALCHEMY_DATABASE_URI = db_url
+    else:
+        if os.environ.get('VERCEL_ENV') or os.environ.get('VERCEL'):
+            SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join('/tmp', 'suivi_evaluation.db')
+        else:
+            SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(BASE_DIR, 'suivi_evaluation.db')
+            
+    # Configuration du dossier d'uploads (utilisation de /tmp sur Vercel)
     if os.environ.get('VERCEL_ENV') or os.environ.get('VERCEL'):
-        SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join('/tmp', 'suivi_evaluation.db')
         UPLOAD_FOLDER = os.path.join('/tmp', 'uploads')
     else:
-        SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(BASE_DIR, 'suivi_evaluation.db')
         UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
         
     SQLALCHEMY_TRACK_MODIFICATIONS = False

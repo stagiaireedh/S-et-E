@@ -1,8 +1,32 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+from flask_login import UserMixin
 
 # Initialisation de SQLAlchemy (sera lié à l'application Flask dans app.py)
 db = SQLAlchemy()
+
+class User(db.Model, UserMixin):
+    """Modèle représentant un évaluateur / utilisateur de la plateforme."""
+    __tablename__ = 'users'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relations
+    projects = db.relationship('Project', backref='owner', lazy=True, cascade="all, delete-orphan")
+    sessions = db.relationship('InterviewSession', backref='author', lazy=True)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'username': self.username,
+            'email': self.email,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
 
 class Project(db.Model):
     """Représente un projet suivi et évalué."""
@@ -12,6 +36,10 @@ class Project(db.Model):
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Propriétaire & Démo
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    is_demo = db.Column(db.Boolean, default=False)
     
     # Relations
     questionnaires = db.relationship('Questionnaire', backref='project', lazy=True, cascade="all, delete-orphan")
@@ -23,8 +51,11 @@ class Project(db.Model):
             'id': self.id,
             'name': self.name,
             'description': self.description,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'user_id': self.user_id,
+            'is_demo': self.is_demo
         }
+
 
 class Questionnaire(db.Model):
     """Représente un questionnaire d'évaluation associé à un projet."""
@@ -47,8 +78,37 @@ class Questionnaire(db.Model):
             'title': self.title,
             'description': self.description,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'questions': [q.to_dict() for q in self.questions]
+            'questions': [q.to_dict() for q in self.questions],
+            'shares': [s.to_dict() for s in self.shares]
         }
+
+class SharedQuestionnaire(db.Model):
+    """Table de jonction gérant le partage collaboratif des questionnaires."""
+    __tablename__ = 'shared_questionnaires'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    questionnaire_id = db.Column(db.Integer, db.ForeignKey('questionnaires.id'), nullable=False)
+    shared_with_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    permission = db.Column(db.String(20), default='read')  # 'read' ou 'edit'
+    shared_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relations explicites
+    shared_with = db.relationship('User', foreign_keys=[shared_with_user_id], backref='shared_questionnaires_received', lazy=True)
+    shared_by = db.relationship('User', foreign_keys=[shared_by_user_id], backref='shared_questionnaires_given', lazy=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'questionnaire_id': self.questionnaire_id,
+            'shared_with_user_id': self.shared_with_user_id,
+            'shared_with_email': self.shared_with.email if self.shared_with else '',
+            'shared_with_username': self.shared_with.username if self.shared_with else '',
+            'permission': self.permission,
+            'shared_by_user_id': self.shared_by_user_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
 
 class Question(db.Model):
     """Une question spécifique au sein d'un questionnaire."""
@@ -94,6 +154,9 @@ class InterviewSession(db.Model):
     interview_date = db.Column(db.Date, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # Évaluateur associé
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    
     # Relations
     answers = db.relationship('Answer', backref='session', lazy=True, cascade="all, delete-orphan")
     attachments = db.relationship('Attachment', backref='session', lazy=True)
@@ -110,8 +173,10 @@ class InterviewSession(db.Model):
             'session_type': self.session_type,
             'interview_date': self.interview_date.isoformat() if self.interview_date else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
+            'user_id': self.user_id,
             'answers': [a.to_dict() for a in self.answers]
         }
+
 
 class Answer(db.Model):
     """Réponse d'un entretien à une question précise."""

@@ -2,168 +2,131 @@
 
 Ce projet est une application web conçue pour les équipes de suivi-évaluation (M&E) afin de réaliser la **triangulation des données qualitatives et quantitatives** après des entretiens individuels ou collectifs (focus groups). 
 
-L'application intègre des modules d'analyse intelligente simulée (sentiments, thèmes, risques et recommandations), de visualisation de données interactives et un assistant IA interactif sous forme de chat.
+L'application intègre des modules d'analyse intelligente (sentiments, thèmes, risques et recommandations), de visualisation de données interactives (tableau de bord) et un assistant IA interactif grounded dans les témoignages.
 
 ---
 
-## 🚀 Fonctionnalités Clés
+## 🚀 Fonctionnalités Avancées (Version 2.0)
 
-1.  **Collecte des Données** :
-    *   Interface de création de questionnaires dynamiques (type texte libre ou choix unique).
-    *   Formulaire de saisie manuelle guidée des réponses pour chaque session d'entretien.
-    *   Zone d'import (Drag-and-Drop) de fichiers complémentaires (comptes rendus, rapports) liés aux projets.
-2.  **Analyse de Triangulation Inteligente** :
-    *   Analyse de sentiment en français basée sur un dictionnaire lexical (positif, négatif, neutre).
-    *   Extraction automatique des thèmes récurrents par analyse fréquentielle pondérée.
-    *   Détection automatique des risques et génération de recommandations d'action prioritaires.
-3.  **Visualisation de Données (Dashboard)** :
-    *   Indicateurs de performance (KPIs) dynamiques.
-    *   Graphique en anneau (Doughnut) de répartition des acteurs interrogés (Bénéficiaires, Partenaires, Équipe, Autorités).
-    *   Courbe d'évolution temporelle du sentiment des interlocuteurs.
-    *   Filtre interactif par projet.
-4.  **Matrice Comparative de Triangulation** :
-    *   Vue côte-à-côte permettant de comparer les réponses à une question précise entre les différentes catégories d'acteurs pour déceler les convergences ou divergences.
-5.  **Rapports Automatisés en PDF** :
-    *   Génération d'un **Rapport d'Évaluation Global** complet du projet intégrant la synthèse IA, les statistiques d'acteurs, les thèmes, les risques et les recommandations d'action.
-    *   Génération d'une **Fiche de Compte Rendu** détaillée par session d'entretien individuel ou collectif.
-6.  **Assistant IA (Chat)** :
-    *   Interface de discussion interactive permettant de poser des questions en langage naturel (ex: *"Quels sont les risques ?"*, *"Synthèse du projet"*).
+1.  **Authentification Multi-Utilisateurs** :
+    *   Gestion des sessions avec **Flask-Login** et hachage de sécurité **bcrypt**.
+    *   Isolation stricte des projets : chaque évaluateur gère ses propres données d'études en toute confidentialité.
+    *   Profil utilisateur (avatar/initiales) et menu de déconnexion dans l'en-tête.
+
+2.  **Persistance Cloud avec Neon PostgreSQL** :
+    *   Mode hybride intelligent : connexion automatique à **Neon PostgreSQL** en production (via `DATABASE_URL`) et repli sur **SQLite** local en développement.
+    *   Persistance garantie (finies les bases SQLite éphémères réinitialisées à chaque déploiement Vercel).
+
+3.  **Partage Collaboratif de Questionnaires** :
+    *   Permet de partager des formulaires d'enquête avec d'autres utilisateurs inscrits sur la plateforme (recherche par adresse email).
+    *   Attribution de droits fins : **Lecture seule** (pour saisie d'entretiens uniquement) ou **Édition** (pour modifier ou ajouter des questions).
+    *   Révocation des partages en temps réel.
+
+4.  **Exports Analytiques Excel & CSV** :
+    *   Génération et téléchargement d'exports de données brutes structurées avec **Pandas** et **Openpyxl**.
+    *   Colonnes exportées : Projet, Session d'entretien, Catégorie d'acteur, Question, Réponse verbatim, Sentiment calculé, Thématique associée.
+    *   Boutons d'export directs sur le Tableau de bord et dans l'onglet Triangulation.
+
+5.  **Bascule de Thème Sombre / Clair Premium** :
+    *   Design Premium HSL moderne s'adaptant instantanément.
+    *   Persistance automatique de la préférence dans le `localStorage` de l'utilisateur ou détection du thème système par défaut.
+
+6.  **Conservation Sécurisée de la Démo (Projet AEPA)** :
+    *   Le projet fictif AEPA reste partagé comme projet d'exploration en lecture seule pour tous les nouveaux comptes.
+    *   Un badge **DÉMO** s'affiche et toutes les actions d'écriture (suppression de projet, modification d'entretiens) sont grisées et bloquées pour ce projet d'étude.
 
 ---
 
 ## 🛠️ Stack Technique
 
-*   **Backend** : Python 3.10+ avec le framework **Flask** et **Flask-SQLAlchemy**.
-*   **Base de Données** : **SQLite** (Base locale relationnelle légère).
-*   **Génération PDF** : **FPDF2** (Génération PDF moderne en français).
-*   **Frontend** : HTML5, Vanilla CSS3 (Design sombre premium inspiré de glassmorphism, responsive) et JavaScript (ES6+ asynchrone, intégration avec **Chart.js** pour les graphiques).
+*   **Backend** : Python 3.12 avec **Flask**, **Flask-Login** et **Bcrypt**.
+*   **Analyse de Données & Exports** : **Pandas** et **Openpyxl** (manipulation de feuilles de calcul).
+*   **Base de Données** : **PostgreSQL (Neon Cloud)** en production et **SQLite** local.
+*   **Génération PDF** : **FPDF2** (gestion des caractères spéciaux Unicode).
+*   **Frontend** : HTML5, Vanilla CSS3 (variables CSS dynamiques, effets glassmorphism) et JavaScript (ES6+ asynchrone avec cache local et événements de synchronisation inter-onglets).
 
 ---
 
-## 📦 Installation et Lancement
+## 📦 Installation et Lancement Local
 
-### 1. Prérequis
-Assurez-vous d'avoir Python 3.10 ou supérieur installé sur votre machine.
-
-### 2. Cloner ou naviguer dans le dossier du projet
+### 1. Cloner ou naviguer dans le dossier du projet
 ```bash
 cd d:/Antigravity/suivi_evaluation
 ```
 
-### 3. Créer et activer un environnement virtuel (recommandé)
+### 2. Créer et activer un environnement virtuel
 Sur Windows (PowerShell) :
 ```powershell
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 ```
 
-### 4. Installer les dépendances
+### 3. Installer les dépendances
 ```bash
 pip install -r requirements.txt
 ```
 
-### 5. Initialiser la base de données avec des données de démonstration
-Exécutez le script d'initialisation pour générer la structure SQLite et y insérer les données d'un projet réaliste d'accès à l'eau potable (Projet AEPA) comprenant 6 sessions d'entretiens diversifiés :
-```bash
-python database_init.py
-```
-
-### 6. Lancer le serveur Flask
+### 4. Lancement local (SQLite par défaut)
+Supprimez l'ancienne base SQLite si vous souhaitez repartir à zéro. Le premier démarrage de Flask recréera les tables et ensemencera le projet démo AEPA de manière automatisée.
 ```bash
 python app.py
 ```
-
-L'application sera accessible localement à l'adresse suivante :
+Accédez à l'application locale sur :
 👉 **[http://localhost:5000](http://localhost:5000)**
 
 ---
 
-## 🔑 Configuration des Clés API et Cascade d'IA
+## 🐘 Configuration de Neon (PostgreSQL Cloud) & Migration
 
-L'application intègre une architecture intelligente en cascade. Lors d'une requête analytique (sentiments, thèmes, triangulation, chat), elle interroge successivement :
-1.  **Google Gemini** (`gemini-2.5-flash`) via son SDK officiel.
-2.  **Groq Cloud** (`llama-3.3-70b-versatile`) en cas de dépassement de quota ou d'erreur sur Gemini.
-3.  **GitHub Models** (`gpt-4o`) en dernier recours d'API.
-4.  **Simulation locale déterministe** (basée sur des dictionnaires locaux en français) si toutes les APIs échouent ou si aucune clé n'est fournie.
+### 1. Créer un compte sur Neon
+1. Allez sur [Neon Tech](https://neon.tech/) et créez un compte gratuit.
+2. Créez un nouveau projet (ex: `suivi-evaluation`).
+3. Dans votre tableau de bord, copiez la **Connection String** sous le format `postgres://...` ou `postgresql://...` (en cochant `Connection pooling` si nécessaire).
 
-### Comment obtenir les clés API gratuitement :
+### 2. Exécuter le Script de Migration
+Vous pouvez pousser vos données locales existantes (les questionnaires et sessions AEPA déjà saisis) vers votre base Neon en définissant la variable d'environnement `DATABASE_URL` et en lançant le script de migration :
 
-*   **Google Gemini Key** :
-    1. Rendez-vous sur [Google AI Studio](https://aistudio.google.com/).
-    2. Connectez-vous avec un compte Google et cliquez sur **Get API key**.
-    3. Générez une clé gratuite pour vos tests de développement.
-*   **Groq Cloud Key** :
-    1. Créez un compte gratuit sur la [Console Groq Cloud](https://console.groq.com/).
-    2. Naviguez vers la section **API Keys** et cliquez sur **Create API Key**.
-*   **GitHub Token** :
-    1. Accédez à vos paramètres GitHub : [GitHub Developer Settings](https://github.com/settings/tokens).
-    2. Cliquez sur **Generate new token (classic)**.
-    3. Donnez-lui un nom et sélectionnez les permissions minimales requises.
-    4. Utilisez ce token comme clé d'accès.
-
-Pour configurer les clés, dupliquez le fichier `.env.example` en un fichier nommé `.env` à la racine du projet et renseignez-y vos clés :
-```bash
-cp .env.example .env
+Sur Windows (PowerShell) :
+```powershell
+$env:DATABASE_URL="votre_connection_string_neon"
+python migrate_to_neon.py
 ```
+Le script va :
+1. Se connecter à votre instance Neon et y créer la structure des tables.
+2. Créer un compte de démonstration par défaut : **`demo@example.com`** avec le mot de passe **`demo123`**.
+3. Transférer l'ensemble de votre base SQLite vers PostgreSQL en conservant le statut de démo en lecture seule pour le projet AEPA.
 
 ---
 
-## ☁️ Déploiement sur le Cloud
+## ☁️ Déploiement sur Vercel
 
-Cette application est préconfigurée pour être déployée gratuitement sur **Vercel** ou **Render**.
-
-### 1. Déploiement sur Render (Recommandé pour la persistance SQLite)
-Render permet d'héberger l'application Flask avec un serveur web de production (**Gunicorn**).
-
-1. Poussez votre projet sur un dépôt **GitHub**.
-2. Créez un compte gratuit sur [Render](https://render.com/).
-3. Cliquez sur **New +** -> **Blueprint** et connectez votre dépôt GitHub (cela lira automatiquement le fichier [render.yaml](file:///d:/Antigravity/suivi_evaluation/render.yaml)).
-4. *Alternativement*, créez un **Web Service** manuel :
-   - **Build Command** : `pip install -r requirements.txt && python database_init.py`
-   - **Start Command** : `gunicorn app:app`
-5. Dans l'onglet **Environment**, ajoutez les variables d'environnement si vous souhaitez activer la vraie IA : `GEMINI_API_KEY`, `GROQ_API_KEY`, `GITHUB_TOKEN`.
-6. Tutoriel officiel : [Render Python/Flask Deployment](https://docs.render.com/deploy-flask).
-
-*Note : La base de données SQLite étant stockée localement, le disque est éphémère sur les serveurs gratuits de Render. Pour un projet de production persistant, utilisez un disque persistant (Persistent Disk) sur Render ou connectez une base de données PostgreSQL gratuite.*
-
-### 2. Déploiement sur Vercel
-Vercel héberge le backend Flask sous forme de fonctions serverless à l'aide de [vercel.json](file:///d:/Antigravity/suivi_evaluation/vercel.json).
-
-1. Installez le CLI de Vercel : `npm install -g vercel`.
-2. Lancez le déploiement depuis la racine du projet :
-   ```bash
-   vercel
-   ```
-3. Suivez les instructions pour lier le projet.
-4. Pour déployer en production :
-   ```bash
-   vercel --prod
-   ```
-5. Ajoutez vos clés secrètes dans le tableau de bord Vercel sous **Settings -> Environment Variables**.
-6. Tutoriel officiel : [Vercel Python Serverless Functions](https://vercel.com/docs/concepts/functions/serverless-functions/runtimes/python).
+1. Rendez-vous sur votre tableau de bord [Vercel](https://vercel.com).
+2. Liez votre dépôt GitHub **stagiaireedh/S-et-E**.
+3. Dans la configuration du projet, ajoutez les variables d'environnement suivantes :
+   *   `DATABASE_URL` : (votre chaîne de connexion Neon PostgreSQL).
+   *   `SECRET_KEY` : (une chaîne aléatoire pour sécuriser les cookies de session).
+   *   `GEMINI_API_KEY`, `GROQ_API_KEY`, `GITHUB_TOKEN` (pour activer les vrais modèles d'IA en production).
+4. Vercel lancera automatiquement la compilation via `vercel.json` et déploiera l'application.
 
 ---
-
-
 
 ## 📁 Structure du Projet
 
 ```text
 d:/Antigravity/suivi_evaluation/
-├── app.py                  # Initialisation Flask et déclaration des routes REST API
-├── config.py               # Fichier de configuration (Database, Uploads, Extensions)
-├── models.py               # Schéma de base de données relationnelle SQLAlchemy
+├── app.py                  # Initialisation Flask, LoginManager et déclaration des routes REST API
+├── config.py               # Fichier de configuration (choix dynamique Postgres/SQLite, uploads)
+├── models.py               # Définition des schémas SQLAlchemy (User, Project, SharedQuestionnaire...)
+├── migrate_to_neon.py      # Script autonome de transfert de données SQLite -> Neon PostgreSQL
 ├── ai_service.py           # Algorithmes d'analyse lexicale, de triangulation et chat IA
 ├── pdf_service.py          # Moteur de génération de documents PDF (FPDF2)
-├── database_init.py        # Script de création et de remplissage de la base de données
-├── requirements.txt        # Fichier de dépendances Python
+├── requirements.txt        # Fichier des dépendances Python
 ├── README.md               # Le présent fichier d'aide
-├── uploads/                # Répertoire de stockage des fichiers importés (géré automatiquement)
 ├── static/
 │   ├── css/
-│   │   └── style.css       # Style design premium responsive (effets de verre / glassmorphism)
+│   │   └── style.css       # Styles graphiques des thèmes (sombre/clair), formulaires d'auth, badges
 │   └── js/
-│       └── app.js          # Contrôleur frontend, intégration AJAX, Chart.js et discussion
+│       └── app.js          # Logique d'authentification, bascule de thèmes, gestion des partages et exports
 └── templates/
-    └── index.html          # Template HTML principal (Application Shell)
+    └── index.html          # Template HTML principal (Application Shell avec formulaires d'authentification)
 ```

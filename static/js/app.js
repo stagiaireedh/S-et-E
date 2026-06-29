@@ -5,6 +5,7 @@
 
 document.addEventListener('DOMContentLoaded', () => {
     // --- VARIABLES DE L'APPLICATION ---
+    let currentUser = null;
     let activeProjectId = null;
     let activeQuestionnaireId = null;
     let projects = [];
@@ -65,6 +66,15 @@ document.addEventListener('DOMContentLoaded', () => {
             showLoader();
             try {
                 const res = await fetch(url, options);
+                
+                // Si l'utilisateur perd sa session ou n'est pas connecté
+                if (res.status === 401 && !url.includes('/api/me')) {
+                    currentUser = null;
+                    document.getElementById('auth-overlay').style.display = 'flex';
+                    document.getElementById('app-workspace').style.display = 'none';
+                    throw new Error("Authentification requise.");
+                }
+                
                 if (!res.ok) {
                     const errData = await res.json().catch(() => ({}));
                     throw new Error(errData.message || `Erreur HTTP ${res.status}`);
@@ -73,7 +83,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 apiCache.set(url, data);
                 return data;
             } catch (err) {
-                showToast(`Erreur de chargement : ${err.message}`, 'error');
+                if (err.message !== "Authentification requise.") {
+                    showToast(`Erreur de chargement : ${err.message}`, 'error');
+                }
                 throw err;
             } finally {
                 hideLoader();
@@ -82,6 +94,14 @@ document.addEventListener('DOMContentLoaded', () => {
             showLoader();
             try {
                 const res = await fetch(url, options);
+                
+                if (res.status === 401) {
+                    currentUser = null;
+                    document.getElementById('auth-overlay').style.display = 'flex';
+                    document.getElementById('app-workspace').style.display = 'none';
+                    throw new Error("Authentification requise.");
+                }
+                
                 if (!res.ok) {
                     const errData = await res.json().catch(() => ({}));
                     throw new Error(errData.message || `Erreur HTTP ${res.status}`);
@@ -96,7 +116,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 return data;
             } catch (err) {
-                showToast(`Erreur de traitement : ${err.message}`, 'error');
+                if (err.message !== "Authentification requise.") {
+                    showToast(`Erreur de traitement : ${err.message}`, 'error');
+                }
                 throw err;
             } finally {
                 hideLoader();
@@ -158,7 +180,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const formNewProject = document.getElementById('form-new-project');
     const formNewQuestionnaire = document.getElementById('form-new-questionnaire');
     const formInterviewSaisie = document.getElementById('form-interview-saisie');
-    
+
     // --- 1. GESTION DES ONGLETS ---
     function switchTab(tabId) {
         // Mettre à jour la navigation active
@@ -248,6 +270,27 @@ document.addEventListener('DOMContentLoaded', () => {
             projectTitle.innerText = proj.name;
             projectDesc.innerText = proj.description || "Aucune description.";
             localStorage.setItem('activeProjectId', activeProjectId);
+
+            // Cacher ou afficher les boutons selon le flag is_demo
+            const badgeDemo = document.getElementById('demo-badge');
+            const btnDeleteProject = document.getElementById('btn-delete-project');
+            const btnCreateQuestionnaire = document.getElementById('btn-create-questionnaire');
+            
+            if (proj.is_demo) {
+                if (badgeDemo) badgeDemo.style.display = 'inline-block';
+                if (btnDeleteProject) btnDeleteProject.style.display = 'none';
+                if (btnCreateQuestionnaire) {
+                    btnCreateQuestionnaire.disabled = true;
+                    btnCreateQuestionnaire.title = "Le projet de démonstration est en lecture seule.";
+                }
+            } else {
+                if (badgeDemo) badgeDemo.style.display = 'none';
+                if (btnDeleteProject) btnDeleteProject.style.display = 'inline-flex';
+                if (btnCreateQuestionnaire) {
+                    btnCreateQuestionnaire.disabled = false;
+                    btnCreateQuestionnaire.title = "";
+                }
+            }
         }
     }
     
@@ -266,6 +309,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const proj = projects.find(p => p.id === activeProjectId);
         if (!proj) return;
         
+        if (proj.is_demo) {
+            showToast("Le projet de démonstration ne peut pas être supprimé.", "warning");
+            return;
+        }
+
         openConfirmModal(
             proj.name,
             "Êtes-vous sûr de vouloir supprimer ce projet ? Cette action supprimera définitivement le projet, tous les questionnaires, tous les entretiens et toutes les réponses de triangulation associés.",
@@ -311,7 +359,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 modalProject.classList.remove('active');
                 formNewProject.reset();
                 showToast("Projet créé avec succès !", "success");
-                // Recharger et forcer la sélection du nouveau projet
                 localStorage.setItem('activeProjectId', result.project.id);
                 await loadProjects(true);
             }
@@ -331,7 +378,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!activeProjectId) return;
         
         try {
-            // 1. Charger les métriques globales
             const sessions = await requestAPI(`/api/projects/${activeProjectId}/sessions`);
             const quests = await requestAPI(`/api/projects/${activeProjectId}/questionnaires`);
             const attachments = await requestAPI(`/api/projects/${activeProjectId}/attachments`);
@@ -340,7 +386,6 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('kpi-total-questionnaires').innerText = quests.length;
             document.getElementById('kpi-total-attachments').innerText = attachments.length;
             
-            // 2. Charger triangulation IA pour le KPI sentiment
             try {
                 const triang = await requestAPI(`/api/projects/${activeProjectId}/triangulation`);
                 if (triang.success) {
@@ -354,23 +399,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('kpi-sentiment-avg').innerText = "-";
             }
             
-            // 3. Remplir le tableau des entretiens récents
+            // Remplir le tableau des entretiens récents
             const tbody = document.querySelector('#table-recent-sessions tbody');
             tbody.innerHTML = '';
             
             if (sessions.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Aucun entretien enregistré.</td></tr>';
             } else {
-                // Prendre les 5 sessions les plus récentes
+                const activeProj = projects.find(p => p.id === activeProjectId);
+                const isDemo = activeProj && activeProj.is_demo;
+
                 sessions.slice(0, 5).forEach(s => {
                     const tr = document.createElement('tr');
                     
-                    // Calcul d'un sentiment individuel moyen pour la ligne
                     let individualScore = 0;
                     if (s.answers.length > 0) {
                         const scoreSum = s.answers.reduce((acc, a) => {
-                            if (a.answer_text.toLowerCase().includes('panne') || a.answer_text.toLowerCase().includes('difficile') || a.answer_text.toLowerCase().includes('problème')) return acc - 0.5;
-                            if (a.answer_text.toLowerCase().includes('bon') || a.answer_text.toLowerCase().includes('excellent') || a.answer_text.toLowerCase().includes('très bien')) return acc + 0.5;
+                            const txt = a.answer_text.toLowerCase();
+                            if (txt.includes('panne') || txt.includes('difficile') || txt.includes('problème') || txt.includes('défaut')) return acc - 0.5;
+                            if (txt.includes('bon') || txt.includes('excellent') || txt.includes('très bien') || txt.includes('satisfait')) return acc + 0.5;
                             return acc;
                         }, 0);
                         individualScore = scoreSum / s.answers.length;
@@ -400,19 +447,20 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <button class="btn-link btn-download-session-pdf" data-id="${s.id}" title="Télécharger Fiche PDF">
                                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                                 </button>
+                                ${isDemo ? '' : `
                                 <button class="btn-link btn-edit-session" data-id="${s.id}" title="Modifier l'Entretien">
                                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                 </button>
                                 <button class="btn-link btn-delete-session" data-id="${s.id}" data-name="${s.title}" title="Supprimer l'Entretien">
                                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                                 </button>
+                                `}
                             </div>
                         </td>
                     `;
                     tbody.appendChild(tr);
                 });
                 
-                // Ajouter écouteurs de téléchargement pour chaque fiche
                 document.querySelectorAll('.btn-download-session-pdf').forEach(btn => {
                     btn.addEventListener('click', (e) => {
                         const sId = btn.getAttribute('data-id');
@@ -420,7 +468,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 });
 
-                // Ajouter écouteurs d'édition pour chaque fiche
                 document.querySelectorAll('.btn-edit-session').forEach(btn => {
                     btn.addEventListener('click', (e) => {
                         const sId = btn.getAttribute('data-id');
@@ -428,7 +475,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 });
 
-                // Ajouter écouteurs de suppression pour chaque fiche
                 document.querySelectorAll('.btn-delete-session').forEach(btn => {
                     btn.addEventListener('click', (e) => {
                         const sId = btn.getAttribute('data-id');
@@ -438,12 +484,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
             
-            // 4. Charger et afficher la liste des pièces jointes
             renderAttachments(attachments);
-            
-            // 5. Générer les graphiques
             renderDashboardCharts(sessions);
-            
         } catch (err) {
             console.error("Erreur de chargement du dashboard:", err);
         }
@@ -453,7 +495,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- 5. RENDER DES GRAPHIQUES (CHART.JS) ---
     function renderDashboardCharts(sessions) {
-        // Graphique 1: Distribution des Acteurs (Pie/Doughnut)
         const actorCounts = {
             'Bénéficiaire': 0,
             'Partenaire': 0,
@@ -468,8 +509,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         const ctxActors = document.getElementById('chart-actors-distribution').getContext('2d');
-        
-        if (charts.actors) charts.actors.destroy(); // Détruire l'ancienne instance
+        if (charts.actors) charts.actors.destroy();
         
         charts.actors = new Chart(ctxActors, {
             type: 'doughnut',
@@ -494,10 +534,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
         
-        // Graphique 2: Tendance des Sentiments (Chronologique)
-        // Trier les sessions par date
         const sortedSessions = [...sessions].sort((a, b) => new Date(a.interview_date) - new Date(b.interview_date));
-        
         const chartLabels = [];
         const chartData = [];
         
@@ -505,12 +542,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const dateObj = new Date(s.interview_date);
             chartLabels.push(dateObj.toLocaleDateString('fr-FR', { month: 'short', day: 'numeric' }));
             
-            // Calcul rapide de sentiment individuel
             let score = 0;
             if (s.answers.length > 0) {
                 const scoreSum = s.answers.reduce((acc, a) => {
-                    if (a.answer_text.toLowerCase().includes('panne') || a.answer_text.toLowerCase().includes('difficile') || a.answer_text.toLowerCase().includes('problème')) return acc - 0.5;
-                    if (a.answer_text.toLowerCase().includes('bon') || a.answer_text.toLowerCase().includes('excellent') || a.answer_text.toLowerCase().includes('très bien')) return acc + 0.5;
+                    const txt = a.answer_text.toLowerCase();
+                    if (txt.includes('panne') || txt.includes('difficile') || txt.includes('problème') || txt.includes('défaut')) return acc - 0.5;
+                    if (txt.includes('bon') || txt.includes('excellent') || txt.includes('très bien') || txt.includes('satisfait')) return acc + 0.5;
                     return acc;
                 }, 0);
                 score = scoreSum / s.answers.length;
@@ -519,7 +556,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         const ctxSentiment = document.getElementById('chart-sentiments-trend').getContext('2d');
-        
         if (charts.sentiment) charts.sentiment.destroy();
         
         charts.sentiment = new Chart(ctxSentiment, {
@@ -564,10 +600,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const dropZone = document.getElementById('file-drop-area');
     const fileInput = document.getElementById('file-upload-input');
     
-    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('click', () => {
+        const activeProj = projects.find(p => p.id === activeProjectId);
+        if (activeProj && activeProj.is_demo) {
+            showToast("Le projet de démonstration est en lecture seule.", "warning");
+            return;
+        }
+        fileInput.click();
+    });
     
     dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
+        const activeProj = projects.find(p => p.id === activeProjectId);
+        if (activeProj && activeProj.is_demo) return;
         dropZone.classList.add('dragover');
     });
     
@@ -578,6 +623,11 @@ document.addEventListener('DOMContentLoaded', () => {
     dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
         dropZone.classList.remove('dragover');
+        const activeProj = projects.find(p => p.id === activeProjectId);
+        if (activeProj && activeProj.is_demo) {
+            showToast("Le projet de démonstration est en lecture seule.", "warning");
+            return;
+        }
         const files = e.dataTransfer.files;
         if (files.length > 0) {
             uploadFiles(files);
@@ -593,6 +643,11 @@ document.addEventListener('DOMContentLoaded', () => {
     
     async function uploadFiles(files) {
         if (!activeProjectId) return;
+        const activeProj = projects.find(p => p.id === activeProjectId);
+        if (activeProj && activeProj.is_demo) {
+            showToast("Le projet de démonstration est en lecture seule.", "warning");
+            return;
+        }
         
         let successCount = 0;
         for (let i = 0; i < files.length; i++) {
@@ -629,8 +684,6 @@ document.addEventListener('DOMContentLoaded', () => {
         attachments.forEach(att => {
             const div = document.createElement('div');
             div.className = 'attachment-item';
-            
-            const isPdf = att.filename.toLowerCase().endsWith('.pdf');
             
             div.innerHTML = `
                 <div class="attachment-info">
@@ -679,6 +732,15 @@ document.addEventListener('DOMContentLoaded', () => {
         activeQuestionnaireId = parseInt(e.target.value);
         saisieQuestionnaireId.value = activeQuestionnaireId;
         renderQuestionsFields();
+        
+        // Afficher/masquer le bouton de partage de questionnaire
+        const btnShare = document.getElementById('btn-share-questionnaire');
+        const proj = projects.find(p => p.id === activeProjectId);
+        if (activeQuestionnaireId && proj && !proj.is_demo) {
+            btnShare.style.display = 'block';
+        } else {
+            btnShare.style.display = 'none';
+        }
     });
     
     function renderQuestionsFields() {
@@ -726,7 +788,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const session_type = document.getElementById('saisie-type-session').value;
         const actor_category = document.getElementById('saisie-actor-category').value;
         
-        // Collecte des réponses aux questions
         const answers = {};
         const quest = questionnaires.find(q => q.id === questionnaireId);
         if (quest) {
@@ -762,7 +823,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (result.success) {
                 showToast(isEdit ? "Entretien mis à jour avec succès !" : "Entretien enregistré avec succès !", "success");
                 
-                // Réinitialiser le formulaire et l'état d'édition
                 editingSessionId = null;
                 formInterviewSaisie.reset();
                 dynamicQuestionsContainer.innerHTML = '<p class="text-muted text-center py-4">Veuillez d\'abord sélectionner un questionnaire dans le panneau de gauche.</p>';
@@ -776,7 +836,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (btnCancelEdit) btnCancelEdit.remove();
                 document.querySelector('#tab-collecte h2').innerText = "Saisie Individuelle & Collective";
                 
-                // Rediriger vers le dashboard
+                const btnShare = document.getElementById('btn-share-questionnaire');
+                if (btnShare) btnShare.style.display = 'none';
+
                 switchTab('dashboard');
             }
         } catch (err) {
@@ -790,9 +852,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const questionsListDiv = document.getElementById('modal-questions-list');
     
     btnCreateQuestionnaire.addEventListener('click', () => {
+        const activeProj = projects.find(p => p.id === activeProjectId);
+        if (activeProj && activeProj.is_demo) {
+            showToast("Le projet de démonstration est en lecture seule.", "warning");
+            return;
+        }
         modalQuestionnaire.classList.add('active');
         questionsListDiv.innerHTML = '';
-        addQuestionRow(); // Ajouter une première ligne par défaut
+        addQuestionRow();
     });
     
     document.getElementById('btn-close-quest-modal').addEventListener('click', () => modalQuestionnaire.classList.remove('active'));
@@ -811,7 +878,6 @@ document.addEventListener('DOMContentLoaded', () => {
             <button type="button" class="btn-remove-row">&times;</button>
         `;
         
-        // Masquer/Afficher les choix selon le type sélectionné
         const selectType = div.querySelector('.quest-type');
         const inputChoices = div.querySelector('.quest-choices');
         
@@ -826,7 +892,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
         
-        // Suppression de ligne
         div.querySelector('.btn-remove-row').addEventListener('click', () => {
             div.remove();
         });
@@ -854,26 +919,26 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         if (questions.length === 0) {
-            alert("Veuillez ajouter au moins une question.");
+            showToast("Veuillez ajouter au moins une question.", "warning");
             return;
         }
         
         const payload = { title, description, questions };
         
         try {
-            const res = await fetch(`/api/projects/${activeProjectId}/questionnaires`, {
+            const result = await requestAPI(`/api/projects/${activeProjectId}/questionnaires`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-            const result = await res.json();
             if (result.success) {
                 modalQuestionnaire.classList.remove('active');
                 formNewQuestionnaire.reset();
+                showToast("Questionnaire créé avec succès !", "success");
                 loadQuestionnairesList();
             }
         } catch (err) {
-            alert("Erreur lors de la création du questionnaire.");
+            console.error("Erreur lors de la création du questionnaire:", err);
         }
     });
 
@@ -890,7 +955,6 @@ document.addEventListener('DOMContentLoaded', () => {
             analysisDataGlobal = data;
             
             if (!data.success) {
-                // Pas assez de données
                 document.getElementById('ai-gauge-sentiment-label').innerText = "-";
                 document.getElementById('ai-gauge-sentiment-label').style.borderColor = "var(--border-color)";
                 document.getElementById('ai-gauge-sentiment-label').style.boxShadow = "none";
@@ -902,7 +966,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             
-            // 1. Sentiment Gauge
             const score = data.avg_sentiment_score;
             const label = data.sentiment_label;
             
@@ -924,11 +987,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 gauge.style.color = 'var(--warning)';
             }
             
-            // 2. Thèmes récurrents
             const themesDiv = document.getElementById('ai-themes-list');
             themesDiv.innerHTML = '';
             
-            // Trouver le poids maximum pour afficher le pourcentage relatif des barres
             const maxWeight = data.themes.length > 0 ? Math.max(...data.themes.map(t => t.weight)) : 1;
             
             data.themes.forEach(t => {
@@ -947,7 +1008,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 themesDiv.appendChild(row);
             });
             
-            // 3. Recommandations
             const recDiv = document.getElementById('ai-recommendations-list');
             recDiv.innerHTML = '';
             
@@ -961,9 +1021,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 recDiv.appendChild(card);
             });
             
-            // 4. Charger les questions dans le sélecteur matriciel comparatif
             loadCompareQuestions();
-            
         } catch (err) {
             console.error("Erreur de chargement triangulation:", err);
         }
@@ -973,25 +1031,22 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!activeProjectId) return;
         
         try {
-            // Récupérer le premier questionnaire pour lister ses questions
             const quests = await requestAPI(`/api/projects/${activeProjectId}/questionnaires`);
             if (quests.length === 0) {
                 selectCompareQuestion.innerHTML = '<option value="" disabled selected>Aucun questionnaire...</option>';
                 return;
             }
             
-            // Prendre le premier questionnaire actif par défaut
             const firstQuest = quests[0];
             selectCompareQuestion.innerHTML = '';
             
             firstQuest.questions.forEach(q => {
                 const opt = document.createElement('option');
                 opt.value = q.id;
-                opt.innerText = `${q.order_num}. ${q.text.substring(0, 70)}...`;
+                opt.innerText = `${q.order_num}. ${q.text.substring(0, 50)}...`;
                 selectCompareQuestion.appendChild(opt);
             });
             
-            // Rendre le tableau matriciel initialisé
             if (firstQuest.questions.length > 0) {
                 renderTriangulationMatrix(firstQuest.questions[0].id);
             }
@@ -1008,11 +1063,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!activeProjectId) return;
         
         try {
-            // Récupérer toutes les sessions d'entretiens du projet
-            const res = await fetch(`/api/projects/${activeProjectId}/sessions`);
-            const sessions = await res.json();
+            const sessions = await requestAPI(`/api/projects/${activeProjectId}/sessions`);
             
-            // Organiser les réponses par catégorie d'acteur
             const actorAnswers = {
                 'Bénéficiaire': [],
                 'Partenaire': [],
@@ -1031,10 +1083,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
             
-            // Vider l'affichage
             matrixContainer.innerHTML = '';
-            
-            // Pour chaque acteur, s'il y a des réponses, afficher
             let hasAnswers = false;
             
             Object.keys(actorAnswers).forEach(actor => {
@@ -1074,7 +1123,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!hasAnswers) {
                 matrixContainer.innerHTML = '<div class="text-center text-muted py-5"><p>Aucune réponse recueillie pour cette question spécifique.</p></div>';
             }
-            
         } catch (err) {
             console.error("Erreur de rendu matriciel:", err);
         }
@@ -1090,19 +1138,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${isOutgoing ? 'outgoing' : 'incoming'}`;
         
-        // Conversion de markdown très simple en HTML pour les retours à la ligne, listes et gras
         let formattedText = text;
         if (!isOutgoing) {
-            // Remplacer les titres en gras Markdown
             formattedText = formattedText.replace(/### (.*?)\n/g, '<h4>$1</h4>');
             formattedText = formattedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
             formattedText = formattedText.replace(/\*(.*?)\*/g, '<em>$1</em>');
-            // Listes
             formattedText = formattedText.replace(/^- (.*?)\n/gm, '<li>$1</li>');
             formattedText = formattedText.replace(/(<li>.*?<\/li>)/g, '<ul>$1</ul>');
-            // Nettoyer les balises multiples d'UL
             formattedText = formattedText.replace(/<\/ul>\s*<ul>/g, '');
-            // Retours chariots simples
             formattedText = formattedText.replace(/\n/g, '<br>');
         }
         
@@ -1110,8 +1153,6 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="msg-bubble">${formattedText}</div>
         `;
         messagesArea.appendChild(messageDiv);
-        
-        // Défilement automatique vers le bas
         messagesArea.scrollTop = messagesArea.scrollHeight;
     }
     
@@ -1122,7 +1163,6 @@ document.addEventListener('DOMContentLoaded', () => {
         appendMessage(query, true);
         chatInput.value = '';
         
-        // Afficher indicateur de chargement
         const loaderDiv = document.createElement('div');
         loaderDiv.className = 'message incoming loader-msg';
         loaderDiv.innerHTML = '<div class="msg-bubble text-muted">L\'assistant réfléchit...</div>';
@@ -1137,7 +1177,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const result = await res.json();
             
-            // Retirer le loader
             loaderDiv.remove();
             
             if (result.success) {
@@ -1166,15 +1205,13 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     });
 
-    // --- 9. UTILS D'ÉDITION & SUPPRESSION DE SESSION ---
+    // --- 10. UTILS D'ÉDITION & SUPPRESSION DE SESSION ---
     async function editSession(id) {
         showLoader();
         try {
             const session = await requestAPI(`/api/sessions/${id}`);
-            
             editingSessionId = id;
             
-            // Remplir les métadonnées
             document.getElementById('saisie-title').value = session.title;
             document.getElementById('saisie-date').value = session.interview_date.split('T')[0];
             document.getElementById('saisie-interviewer').value = session.interviewer;
@@ -1182,7 +1219,6 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('saisie-type-session').value = session.session_type;
             document.getElementById('saisie-actor-category').value = session.actor_category;
             
-            // Associer le questionnaire et charger les champs
             saisieQuestionnaireId.value = session.questionnaire_id;
             selectQuestionnaire.value = session.questionnaire_id;
             activeQuestionnaireId = session.questionnaire_id;
@@ -1190,7 +1226,6 @@ document.addEventListener('DOMContentLoaded', () => {
             await loadQuestionnairesList();
             renderQuestionsFields();
             
-            // Remplir les réponses textuelles ou sélections
             session.answers.forEach(ans => {
                 const inputEl = formInterviewSaisie.querySelector(`[name="q_${ans.question_id}"]`);
                 if (inputEl) {
@@ -1198,12 +1233,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
             
-            // Modifier le style visuel
             document.querySelector('#tab-collecte h2').innerText = "Modifier l'Entretien";
             btnSubmitSaisie.innerText = "Mettre à jour l'Entretien";
             btnSubmitSaisie.classList.add('btn-warning');
             
-            // Ajouter un bouton d'annulation
             let btnCancelEdit = document.getElementById('btn-cancel-edit-session');
             if (!btnCancelEdit) {
                 btnCancelEdit = document.createElement('button');
@@ -1260,6 +1293,298 @@ document.addEventListener('DOMContentLoaded', () => {
         );
     }
 
+    // --- 11. GESTION DE L'AUTHENTIFICATION ---
+    const authOverlay = document.getElementById('auth-overlay');
+    const appWorkspace = document.getElementById('app-workspace');
+    const formLogin = document.getElementById('form-login');
+    const formRegister = document.getElementById('form-register');
+    const tabLoginBtn = document.getElementById('tab-login-btn');
+    const tabRegisterBtn = document.getElementById('tab-register-btn');
+    const userAvatarInitials = document.getElementById('user-avatar-initials');
+    const userDropdown = document.getElementById('user-dropdown');
+    
+    // Bascule d'onglets de connexion / inscription
+    tabLoginBtn.addEventListener('click', () => {
+        tabLoginBtn.classList.add('active');
+        tabRegisterBtn.classList.remove('active');
+        formLogin.style.display = 'flex';
+        formRegister.style.display = 'none';
+    });
+
+    tabRegisterBtn.addEventListener('click', () => {
+        tabRegisterBtn.classList.add('active');
+        tabLoginBtn.classList.remove('active');
+        formRegister.style.display = 'flex';
+        formLogin.style.display = 'none';
+    });
+
+    // Profil dropdown
+    userAvatarInitials.addEventListener('click', (e) => {
+        e.stopPropagation();
+        userDropdown.style.display = userDropdown.style.display === 'none' ? 'block' : 'none';
+    });
+
+    document.addEventListener('click', () => {
+        if (userDropdown) userDropdown.style.display = 'none';
+    });
+
+    userDropdown.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+
+    // Soumission Connexion
+    formLogin.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('login-email').value;
+        const password = document.getElementById('login-password').value;
+        
+        try {
+            showLoader();
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast("Connexion réussie !", "success");
+                formLogin.reset();
+                initializeUserSession(data.user);
+            } else {
+                showToast(data.message || "Identifiants incorrects.", "error");
+            }
+        } catch (err) {
+            showToast("Impossible de joindre le serveur.", "error");
+        } finally {
+            hideLoader();
+        }
+    });
+
+    // Soumission Inscription
+    formRegister.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const username = document.getElementById('register-username').value;
+        const email = document.getElementById('register-email').value;
+        const password = document.getElementById('register-password').value;
+        
+        try {
+            showLoader();
+            const res = await fetch('/api/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, email, password })
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast("Compte créé avec succès !", "success");
+                formRegister.reset();
+                initializeUserSession(data.user);
+            } else {
+                showToast(data.message || "Erreur de création de compte.", "error");
+            }
+        } catch (err) {
+            showToast("Impossible de joindre le serveur.", "error");
+        } finally {
+            hideLoader();
+        }
+    });
+
+    // Déconnexion
+    document.getElementById('btn-logout').addEventListener('click', async () => {
+        try {
+            showLoader();
+            const res = await fetch('/api/logout', { method: 'POST' });
+            const data = await res.json();
+            if (data.success) {
+                showToast("Déconnexion réussie.", "info");
+                currentUser = null;
+                apiCache.clear();
+                authOverlay.style.display = 'flex';
+                appWorkspace.style.display = 'none';
+            }
+        } catch (err) {
+            showToast("Erreur lors de la déconnexion.", "error");
+        } finally {
+            hideLoader();
+        }
+    });
+
+    function initializeUserSession(user) {
+        currentUser = user;
+        authOverlay.style.display = 'none';
+        appWorkspace.style.display = 'flex';
+        
+        // Initiales pour l'avatar
+        const initials = user.username ? user.username.substring(0, 2).toUpperCase() : 'U';
+        userAvatarInitials.innerText = initials;
+        
+        // Dropdown info
+        document.getElementById('user-display-name').innerText = user.username;
+        document.getElementById('user-display-email').innerText = user.email;
+        
+        // Charger les projets de l'utilisateur
+        loadProjects(true).then(() => {
+            loadDashboardData();
+        });
+    }
+
+    async function checkUserSession() {
+        try {
+            const res = await fetch('/api/me');
+            if (res.status === 200) {
+                const data = await res.json();
+                if (data.success) {
+                    initializeUserSession(data.user);
+                    return;
+                }
+            }
+        } catch (err) {
+            console.log("Session inactive.");
+        }
+        authOverlay.style.display = 'flex';
+        appWorkspace.style.display = 'none';
+    }
+
+    // --- 12. PARTAGE DE QUESTIONNAIRE ---
+    const shareModal = document.getElementById('modal-share');
+    const formShare = document.getElementById('form-share-questionnaire');
+    const btnShareQuestionnaire = document.getElementById('btn-share-questionnaire');
+    const btnCloseShareModal = document.getElementById('btn-close-share-modal');
+    const btnCloseSharePanel = document.getElementById('btn-close-share-panel');
+    const collaboratorsList = document.getElementById('share-collaborators-list');
+    
+    if (btnShareQuestionnaire) {
+        btnShareQuestionnaire.addEventListener('click', () => {
+            if (!activeQuestionnaireId) return;
+            shareModal.style.display = 'flex';
+            loadCollaboratorsList();
+        });
+    }
+    
+    const hideShareModal = () => { shareModal.style.display = 'none'; };
+    if (btnCloseShareModal) btnCloseShareModal.addEventListener('click', hideShareModal);
+    if (btnCloseSharePanel) btnCloseSharePanel.addEventListener('click', hideShareModal);
+
+    async function loadCollaboratorsList() {
+        if (!activeQuestionnaireId) return;
+        collaboratorsList.innerHTML = '<p class="text-muted text-center py-2">Chargement...</p>';
+        
+        try {
+            const shares = await requestAPI(`/api/questionnaires/${activeQuestionnaireId}/shares`);
+            collaboratorsList.innerHTML = '';
+            
+            if (shares.length === 0) {
+                collaboratorsList.innerHTML = '<p class="text-muted text-center py-3">Aucun collaborateur pour le moment.</p>';
+                return;
+            }
+            
+            shares.forEach(s => {
+                const div = document.createElement('div');
+                div.className = 'collaborator-item';
+                div.innerHTML = `
+                    <div class="collaborator-info">
+                        <span class="collaborator-email">${s.shared_with_email}</span>
+                        <span class="collaborator-perm">Droit: ${s.permission === 'edit' ? 'Modification' : 'Lecture'}</span>
+                    </div>
+                    <button class="btn-revoke-share" data-uid="${s.shared_with_user_id}">Révoquer</button>
+                `;
+                
+                div.querySelector('.btn-revoke-share').addEventListener('click', async () => {
+                    try {
+                        const res = await requestAPI(`/api/questionnaires/${activeQuestionnaireId}/share/${s.shared_with_user_id}`, {
+                            method: 'DELETE'
+                        });
+                        if (res.success) {
+                            showToast("Accès révoqué avec succès !", "success");
+                            loadCollaboratorsList();
+                        }
+                    } catch (err) {
+                        console.error(err);
+                    }
+                });
+                
+                collaboratorsList.appendChild(div);
+            });
+        } catch (err) {
+            collaboratorsList.innerHTML = '<p class="text-muted text-center py-2 text-danger">Erreur de chargement.</p>';
+        }
+    }
+    
+    formShare.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('share-user-email').value;
+        const permission = document.getElementById('share-permission').value;
+        
+        try {
+            const res = await requestAPI(`/api/questionnaires/${activeQuestionnaireId}/share`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, permission })
+            });
+            if (res.success) {
+                showToast("Questionnaire partagé avec succès !", "success");
+                formShare.reset();
+                loadCollaboratorsList();
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    });
+
+    // --- 13. BASCOULEMENT DE THÈME (CLAIR / SOMBRE) ---
+    const btnThemeToggle = document.getElementById('btn-theme-toggle');
+    const sunIcon = document.getElementById('theme-icon-sun');
+    const moonIcon = document.getElementById('theme-icon-moon');
+    
+    function applyTheme(theme) {
+        if (theme === 'light') {
+            document.body.classList.add('light-theme');
+            sunIcon.style.display = 'block';
+            moonIcon.style.display = 'none';
+        } else {
+            document.body.classList.remove('light-theme');
+            sunIcon.style.display = 'none';
+            moonIcon.style.display = 'block';
+        }
+        localStorage.setItem('theme', theme);
+    }
+    
+    btnThemeToggle.addEventListener('click', () => {
+        const currentTheme = document.body.classList.contains('light-theme') ? 'dark' : 'light';
+        applyTheme(currentTheme);
+        
+        // Redessiner les graphiques pour adapter les couleurs si nécessaire
+        const activeTab = document.querySelector('.nav-item.active').getAttribute('data-tab');
+        if (activeTab === 'dashboard') {
+            loadDashboardData();
+        }
+    });
+    
+    // Appliquer le thème initial au chargement
+    const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    applyTheme(savedTheme);
+
+    // --- 14. EXPORTS DE DONNÉES CSV & EXCEL ---
+    const setupExportButtons = () => {
+        const triggers = [
+            { id: 'btn-export-csv', type: 'csv' },
+            { id: 'btn-export-excel', type: 'excel' },
+            { id: 'btn-export-csv-tri', type: 'csv' },
+            { id: 'btn-export-excel-tri', type: 'excel' }
+        ];
+        
+        triggers.forEach(t => {
+            const btn = document.getElementById(t.id);
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    if (!activeProjectId) return;
+                    window.open(`/api/projects/${activeProjectId}/export/${t.type}`, '_blank');
+                });
+            }
+        });
+    };
+    setupExportButtons();
+
     // --- ÉCOUTEUR SYNC DES ONGLETS (dataChanged) ---
     document.addEventListener('dataChanged', async (e) => {
         console.log("Synchronisation globale déclenchée par :", e.detail);
@@ -1278,8 +1603,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- 10. INITIALISATION GENERALE ---
-    loadProjects(true).then(() => {
-        loadDashboardData();
-    });
+    // --- 15. INITIALISATION GENERALE ---
+    checkUserSession();
 });
