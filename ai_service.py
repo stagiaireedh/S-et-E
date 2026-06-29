@@ -411,3 +411,188 @@ def _local_chat_assistant_respond(user_query, project_id, sessions):
             return response_text
             
         return "Désolé, l'assistant IA est hors ligne et je n'ai pas trouvé de mention directe dans la base de données. Essayez de taper 'risques' ou 'synthèse'."
+
+# --- GÉNÉRATION DE QUESTIONNAIRE PAR IA ---
+def generate_questionnaire_from_prompt(prompt):
+    """
+    Génère un questionnaire structuré en blocs à partir d'un prompt utilisateur.
+    Tente d'appeler l'IA, sinon utilise un système de simulation locale.
+    """
+    if ai_client:
+        try:
+            system_prompt = (
+                "Tu es un expert en suivi-évaluation et conception de formulaires d'enquête. "
+                "Génère un questionnaire structuré et cohérent sous forme de blocs JSON à partir de la demande de l'utilisateur. "
+                "Retourne OBLIGATOIREMENT un objet JSON valide avec cette structure exacte, sans markdown, sans ```json, juste le JSON brute :\n"
+                "{\n"
+                "  \"title\": \"Titre du questionnaire\",\n"
+                "  \"description\": \"Description de l'objectif\",\n"
+                "  \"blocks\": [\n"
+                "    {\n"
+                "      \"block_type\": \"title\" | \"text\" | \"section\" | \"question\" | \"table\" | \"photo\" | \"signature\" | \"gps\" | \"file\" | \"ai\" | \"matrix\" | \"checkbox\" | \"comment\",\n"
+                "      \"content\": {\n"
+                "         // pour 'title' : { \"title\": \"Titre\", \"description\": \"Détails\" }\n"
+                "         // pour 'text' : { \"text\": \"Texte explicatif\" }\n"
+                "         // pour 'section' : { \"title\": \"Nom de section\" }\n"
+                "         // pour 'question' : { \"label\": \"Texte de question\", \"question_type\": \"text\"|\"select\"|\"checkbox\"|\"radio\", \"choices\": [\"Option 1\", \"Option 2\"], \"is_required\": true/false, \"help_text\": \"Texte d'aide\" }\n"
+                "         // pour 'table' : { \"label\": \"Titre tableau\", \"columns\": [\"Colonne 1\", \"Colonne 2\"] }\n"
+                "         // pour 'matrix' : { \"label\": \"Titre matrice\", \"rows\": [\"Ligne 1\"], \"columns\": [\"Col 1\"] }\n"
+                "         // pour 'checkbox' : { \"label\": \"Checklist\", \"options\": [\"Option A\", \"Option B\"] }\n"
+                "         // pour 'signature' ou 'gps' ou 'photo' : { \"label\": \"Titre du champ\", \"help_text\": \"Aide\" }\n"
+                "      }\n"
+                "    }\n"
+                "  ]\n"
+                "}\n"
+                "Fournis au moins 5 à 10 questions/sections logiques."
+            )
+            raw_response = ai_client.generate(system_prompt, f"Génère un questionnaire pour : \"{prompt}\"")
+            result = parse_json_from_llm(raw_response)
+            if result and 'title' in result and 'blocks' in result:
+                return result
+        except Exception as e:
+            logger.warning(f"Échec de génération IA de questionnaire, repli simulation : {e}")
+
+    # Fallback local simulé
+    return _local_generate_questionnaire(prompt)
+
+def _local_generate_questionnaire(prompt):
+    p_lower = prompt.lower()
+    
+    # 1. Cas thématique : Formation
+    if any(k in p_lower for k in ['formation', 'atelier', 'apprentissage', 'cours', 'enseignant']):
+        title = "Évaluation de la Session de Formation"
+        desc = "Formulaire destiné à mesurer l'acquisition des compétences et la satisfaction des participants."
+        blocks = [
+            {"block_type": "title", "content": {"title": title, "description": desc}},
+            {"block_type": "section", "content": {"title": "1. Profil du Participant"}},
+            {"block_type": "question", "content": {"label": "Nom & Prénoms", "question_type": "text", "is_required": True, "help_text": "Nom complet"}},
+            {"block_type": "question", "content": {"label": "Années d'expérience professionnelle", "question_type": "select", "choices": ["Moins de 2 ans", "Entre 2 et 5 ans", "Plus de 5 ans"], "is_required": False}},
+            {"block_type": "section", "content": {"title": "2. Satisfaction & Contenu"}},
+            {"block_type": "question", "content": {"label": "Les objectifs de la formation étaient-ils clairs ?", "question_type": "select", "choices": ["Tout à fait d'accord", "Partiellement d'accord", "Pas d'accord"], "is_required": True}},
+            {"block_type": "question", "content": {"label": "Qualité de l'animateur et de la pédagogie", "question_type": "select", "choices": ["Excellent", "Satisfaisant", "À améliorer"], "is_required": True}},
+            {"block_type": "question", "content": {"label": "Verbatim libre sur les points forts", "question_type": "text", "is_required": False}},
+            {"block_type": "section", "content": {"title": "3. Clôture & Signature"}},
+            {"block_type": "gps", "content": {"label": "Lieu de l'évaluation", "help_text": "Coordonnées GPS terrain"}},
+            {"block_type": "signature", "content": {"label": "Signature de l'évaluateur"}}
+        ]
+        
+    # 2. Cas thématique : Santé
+    elif any(k in p_lower for k in ['santé', 'medical', 'clinique', 'hôpital', 'medecin', 'soins']):
+        title = "Audit de Visite - Centre de Santé"
+        desc = "Mesurer la qualité de l'accueil, la disponibilité des intrants et les temps d'attente."
+        blocks = [
+            {"block_type": "title", "content": {"title": title, "description": desc}},
+            {"block_type": "section", "content": {"title": "1. Identification de la Structure"}},
+            {"block_type": "question", "content": {"label": "Nom du district ou centre de santé", "question_type": "text", "is_required": True}},
+            {"block_type": "gps", "content": {"label": "Coordonnées géographiques de la clinique"}},
+            {"block_type": "section", "content": {"title": "2. Disponibilité & Qualité des Services"}},
+            {"block_type": "question", "content": {"label": "Disponibilité des médicaments essentiels ce jour", "question_type": "select", "choices": ["Tous disponibles", "Rupture partielle", "Rupture totale"], "is_required": True}},
+            {"block_type": "question", "content": {"label": "Temps d'attente estimé avant consultation", "question_type": "select", "choices": ["Moins de 30 min", "30 min à 2h", "Plus de 2h"], "is_required": False}},
+            {"block_type": "photo", "content": {"label": "Photo de la pharmacie ou stock", "help_text": "Optionnel"}},
+            {"block_type": "section", "content": {"title": "3. Validation"}},
+            {"block_type": "signature", "content": {"label": "Signature du médecin chef"}}
+        ]
+        
+    # 3. Par défaut : Structure générique
+    else:
+        title = f"Enquête : {prompt[:40]}..." if len(prompt) > 40 else f"Enquête : {prompt}"
+        desc = "Questionnaire généré automatiquement par l'assistant S&E-CSB."
+        blocks = [
+            {"block_type": "title", "content": {"title": title, "description": desc}},
+            {"block_type": "section", "content": {"title": "1. Renseignements Généraux"}},
+            {"block_type": "question", "content": {"label": "Nom du répondant", "question_type": "text", "is_required": True}},
+            {"block_type": "gps", "content": {"label": "Localisation GPS de l'entretien"}},
+            {"block_type": "section", "content": {"title": "2. Questions Thématiques"}},
+            {"block_type": "question", "content": {"label": "Niveau de satisfaction globale sur l'activité", "question_type": "select", "choices": ["Très Satisfait", "Neutre", "Insatisfait"], "is_required": True}},
+            {"block_type": "question", "content": {"label": "Quelles sont les principales difficultés rencontrées ?", "question_type": "text", "is_required": False}},
+            {"block_type": "section", "content": {"title": "3. Clôture"}},
+            {"block_type": "signature", "content": {"label": "Signature"}}
+        ]
+        
+    return {"title": title, "description": desc, "blocks": blocks}
+
+# --- IMPORTATION IA (DEPUIS TEXTE BRUT DE FICHIER) ---
+def import_questionnaire_from_text(file_text, file_name):
+    """
+    Analyse le texte extrait d'un fichier Word/PDF/Excel avec l'IA en cascade
+    pour en déduire une structure cohérente de blocs.
+    """
+    if ai_client and file_text:
+        try:
+            system_prompt = (
+                "Tu es un assistant IA de suivi-évaluation. Ton rôle est d'analyser le texte brut fourni (qui provient d'un document Word/PDF/Excel) "
+                "et de le structurer sous la forme d'un questionnaire composé de blocs.\n"
+                "Détecte le titre principal, la description éventuelle, les titres de sections et crée des questions adaptées (texte, choix multiples, signature, etc.).\n"
+                "Retourne OBLIGATOIREMENT un objet JSON valide avec cette structure brute (sans ```json, pas d'explication) :\n"
+                "{\n"
+                "  \"title\": \"Titre du questionnaire extrait\",\n"
+                "  \"description\": \"Description ou objectif extrait\",\n"
+                "  \"blocks\": [\n"
+                "     { \"block_type\": \"section\", \"content\": { \"title\": \"Nom section\" } },\n"
+                "     { \"block_type\": \"question\", \"content\": { \"label\": \"Texte de la question\", \"question_type\": \"text\"|\"select\", \"choices\": [\"choix1\", \"choix2\"], \"is_required\": false } }\n"
+                "  ]\n"
+                "}"
+            )
+            # Tronquer le texte si trop long pour éviter les limites de tokens
+            truncated_text = file_text[:6000]
+            raw_response = ai_client.generate(system_prompt, f"Fichier: {file_name}\nContenu du document :\n{truncated_text}")
+            result = parse_json_from_llm(raw_response)
+            if result and 'title' in result and 'blocks' in result:
+                return result
+        except Exception as e:
+            logger.warning(f"Échec de l'analyse d'import IA, repli local : {e}")
+
+    # Fallback local par parsing heuristique basique
+    return _local_parse_questionnaire_from_text(file_text, file_name)
+
+def _local_parse_questionnaire_from_text(file_text, file_name):
+    title = f"Import - {file_name.split('.')[0]}"
+    desc = "Questionnaire extrait automatiquement par analyse textuelle locale."
+    
+    blocks = [
+        {"block_type": "title", "content": {"title": title, "description": desc}},
+        {"block_type": "section", "content": {"title": "Questions Extraites"}}
+    ]
+    
+    if not file_text:
+        blocks.append({"block_type": "question", "content": {"label": "Question exemple issue de l'import", "question_type": "text", "is_required": False}})
+        return {"title": title, "description": desc, "blocks": blocks}
+        
+    lines = file_text.split('\n')
+    question_count = 0
+    
+    for line in lines:
+        line_clean = line.strip()
+        if len(line_clean) < 6:
+            continue
+        
+        # Heuristique : si la ligne se termine par un point d'interrogation, c'est une question
+        if line_clean.endswith('?') or any(line_clean.lower().startswith(q) for q in ['quelle', 'quel', 'comment', 'pourquoi', 'qui', 'avez-vous', 'est-ce']):
+            blocks.append({
+                "block_type": "question",
+                "content": {
+                    "label": line_clean,
+                    "question_type": "text",
+                    "is_required": False,
+                    "help_text": "Détecté par analyse textuelle"
+                }
+            })
+            question_count += 1
+            if question_count >= 12: # Limiter
+                break
+                
+    if question_count == 0:
+        # Prendre les 5 premières lignes significatives comme questions
+        significant_lines = [l.strip() for l in lines if len(l.strip()) > 15][:5]
+        for sl in significant_lines:
+            blocks.append({
+                "block_type": "question",
+                "content": {
+                    "label": sl,
+                    "question_type": "text",
+                    "is_required": False
+                }
+            })
+            
+    return {"title": title, "description": desc, "blocks": blocks}
+

@@ -63,10 +63,15 @@ class Questionnaire(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
     title = db.Column(db.String(150), nullable=False)
     description = db.Column(db.Text, nullable=True)
+    is_template = db.Column(db.Boolean, default=False)
+    template_category = db.Column(db.String(50), nullable=True)  # ex: 'vide', 'mission', 'evaluation', etc.
+    status = db.Column(db.String(20), default='draft')  # 'draft', 'published', 'archived'
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relations
     questions = db.relationship('Question', backref='questionnaire', lazy=True, order_by="Question.order_num", cascade="all, delete-orphan")
+    blocks = db.relationship('QuestionnaireBlock', backref='questionnaire', lazy=True, order_by="QuestionnaireBlock.order_index", cascade="all, delete-orphan")
     sessions = db.relationship('InterviewSession', backref='questionnaire', lazy=True)
     shares = db.relationship('SharedQuestionnaire', lazy=True, cascade="all, delete-orphan")
 
@@ -76,8 +81,13 @@ class Questionnaire(db.Model):
             'project_id': self.project_id,
             'title': self.title,
             'description': self.description,
+            'is_template': self.is_template,
+            'template_category': self.template_category,
+            'status': self.status,
             'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'questions': [q.to_dict() for q in self.questions],
+            'blocks': [b.to_dict() for b in self.blocks],
             'shares': [s.to_dict() for s in self.shares]
         }
 
@@ -120,6 +130,17 @@ class Question(db.Model):
     choices = db.Column(db.Text, nullable=True)  # Options séparées par des virgules pour le type 'select'
     order_num = db.Column(db.Integer, default=0)
     
+    # Nouveaux attributs pour le constructeur par blocs et la compatibilité ascendante
+    options = db.Column(db.JSON, nullable=True)  # structure optionnelle
+    is_required = db.Column(db.Boolean, default=False)
+    validation_rules = db.Column(db.JSON, nullable=True)
+    conditions = db.Column(db.JSON, nullable=True)
+    default_value = db.Column(db.String(255), nullable=True)
+    help_text = db.Column(db.Text, nullable=True)
+    ai_prompt = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
     # Relations
     answers = db.relationship('Answer', backref='question', lazy=True, cascade="all, delete-orphan")
 
@@ -130,7 +151,72 @@ class Question(db.Model):
             'text': self.text,
             'question_type': self.question_type,
             'choices': [c.strip() for c in self.choices.split(',')] if self.choices else [],
-            'order_num': self.order_num
+            'order_num': self.order_num,
+            'options': self.options if self.options else {},
+            'is_required': self.is_required,
+            'validation_rules': self.validation_rules if self.validation_rules else {},
+            'conditions': self.conditions if self.conditions else {},
+            'default_value': self.default_value,
+            'help_text': self.help_text,
+            'ai_prompt': self.ai_prompt,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+class QuestionnaireBlock(db.Model):
+    """Représente un bloc visuel interactif au sein d'un questionnaire (style Notion/Canva)."""
+    __tablename__ = 'questionnaire_blocks'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    questionnaire_id = db.Column(db.Integer, db.ForeignKey('questionnaires.id', ondelete='CASCADE'), nullable=False)
+    block_type = db.Column(db.String(50), nullable=False)  # 'title', 'text', 'section', 'question', 'table', 'photo', 'signature', 'gps', 'file', 'ai', 'matrix', 'checkbox', 'comment'
+    order_index = db.Column(db.Integer, nullable=False, default=0)
+    parent_block_id = db.Column(db.Integer, db.ForeignKey('questionnaire_blocks.id', ondelete='CASCADE'), nullable=True)
+    content = db.Column(db.JSON, nullable=False, default=dict)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relation récursive pour sous-blocs
+    sub_blocks = db.relationship('QuestionnaireBlock', backref=db.backref('parent', remote_side=[id]), lazy=True, cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'questionnaire_id': self.questionnaire_id,
+            'block_type': self.block_type,
+            'order_index': self.order_index,
+            'parent_block_id': self.parent_block_id,
+            'content': self.content if self.content else {},
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+class BlockLibrary(db.Model):
+    """Bibliothèque de blocs réutilisables créés ou sauvegardés par les utilisateurs."""
+    __tablename__ = 'block_library'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    block_type = db.Column(db.String(50), nullable=False)
+    name = db.Column(db.String(150), nullable=False)
+    content = db.Column(db.JSON, nullable=False, default=dict)
+    is_shared = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relation vers l'utilisateur créateur
+    user = db.relationship('User', backref='library_blocks', lazy=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'block_type': self.block_type,
+            'name': self.name,
+            'content': self.content if self.content else {},
+            'is_shared': self.is_shared,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
 class InterviewSession(db.Model):

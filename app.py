@@ -6,7 +6,7 @@ from flask import Flask, request, jsonify, render_template, send_from_directory,
 from werkzeug.utils import secure_filename
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from config import Config, allowed_file
-from models import db, User, Project, Questionnaire, Question, InterviewSession, Answer, Attachment, SharedQuestionnaire
+from models import db, User, Project, Questionnaire, Question, InterviewSession, Answer, Attachment, SharedQuestionnaire, QuestionnaireBlock, BlockLibrary
 from ai_service import run_project_triangulation, chat_assistant_respond
 from pdf_service import generate_global_evaluation_pdf, generate_session_summary_pdf
 
@@ -44,11 +44,16 @@ def create_app():
     def unauthorized():
         return jsonify({'success': False, 'message': 'Authentification requise.'}), 401
 
-    # Auto-création des tables (le projet démo a été supprimé)
+    # Auto-création des tables (le projet démo a été supprimé) & migration automatique des questionnaires
     with app.app_context():
         try:
             db.create_all()
             app.logger.info("Base de données initialisée avec succès.")
+            try:
+                from migrate_questionnaires import migrate_with_app
+                migrate_with_app(app)
+            except Exception as migration_error:
+                app.logger.error(f"Erreur lors de la migration des blocs : {migration_error}")
         except Exception as e:
             app.logger.error(f"Erreur d'initialisation automatique de la base : {e}")
 
@@ -716,6 +721,463 @@ def create_app():
         except Exception as e:
             return jsonify({'success': False, 'message': f"Erreur de génération PDF : {str(e)}"}), 500
 
+    # --- API CONSTRUCTEUR PAR BLOCS ---
+    @app.route('/api/questionnaires/<int:questionnaire_id>/blocks', methods=['GET'])
+    @login_required
+    def get_questionnaire_blocks(questionnaire_id):
+        """Récupère tous les blocs d'un questionnaire, ordonnés par index."""
+        quest = Questionnaire.query.get_or_404(questionnaire_id)
+        is_owner = (quest.project.user_id == current_user.id)
+        is_shared = SharedQuestionnaire.query.filter_by(questionnaire_id=questionnaire_id, shared_with_user_id=current_user.id).first() is not None
+        if not (is_owner or is_shared):
+            return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
+            
+        blocks = QuestionnaireBlock.query.filter_by(questionnaire_id=questionnaire_id).order_by(QuestionnaireBlock.order_index.asc()).all()
+        return jsonify([b.to_dict() for b in blocks])
+
+    @app.route('/api/questionnaires/<int:questionnaire_id>/blocks', methods=['POST'])
+    @login_required
+    def add_questionnaire_block(questionnaire_id):
+        """Ajoute un nouveau bloc à un questionnaire et synchronise la table Question."""
+        quest = Questionnaire.query.get_or_404(questionnaire_id)
+        is_owner = (quest.project.user_id == current_user.id)
+        share = SharedQuestionnaire.query.filter_by(questionnaire_id=questionnaire_id, shared_with_user_id=current_user.id).first()
+        if not (is_owner or (share and share.permission == 'edit')):
+            return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
+            
+        data = request.get_json() or {}
+        block_type = data.get('block_type', 'text')
+        content = data.get('content', {})
+        order_index = data.get('order_index')
+        parent_block_id = data.get('parent_block_id')
+        
+        if order_index is None:
+            max_idx = db.session.query(db.func.max(QuestionnaireBlock.order_index)).filter_by(questionnaire_id=questionnaire_id).scalar() or 0
+            order_index = max_idx + 1
+            
+        # Synchronisation avec le modèle Question historique
+        if block_type == 'question':
+            q_entry = Question(
+                questionnaire_id=questionnaire_id,
+                text=content.get('label', 'Question sans titre'),
+                question_type=content.get('question_type', 'text'),
+                choices=",".join(content.get('choices', [])) if isinstance(content.get('choices'), list) else "",
+                order_num=order_index,
+                is_required=content.get('is_required', False),
+                help_text=content.get('help_text', '')
+            )
+            db.session.add(q_entry)
+            db.session.flush()
+            content = dict(content)
+            content['question_id'] = q_entry.id
+            
+        block = QuestionnaireBlock(
+            questionnaire_id=questionnaire_id,
+            block_type=block_type,
+            content=content,
+            order_index=order_index,
+            parent_block_id=parent_block_id
+        )
+        db.session.add(block)
+        db.session.commit()
+        return jsonify({'success': True, 'block': block.to_dict()}), 201
+
+    @app.route('/api/blocks/<int:block_id>', methods=['PUT'])
+    @login_required
+    def update_block(block_id):
+        """Met à jour les propriétés d'un bloc et synchronise la table Question."""
+        block = QuestionnaireBlock.query.get_or_404(block_id)
+        quest = block.questionnaire
+        is_owner = (quest.project.user_id == current_user.id)
+        share = SharedQuestionnaire.query.filter_by(questionnaire_id=quest.id, shared_with_user_id=current_user.id).first()
+        if not (is_owner or (share and share.permission == 'edit')):
+            return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
+            
+        data = request.get_json() or {}
+        if 'content' in data:
+            block.content = data['content']
+            # Synchronisation de la table Question si c'est un bloc Question
+            if block.block_type == 'question':
+                q_id = block.content.get('question_id')
+                if q_id:
+                    q = Question.query.get(q_id)
+                    if q:
+                        q.text = block.content.get('label', 'Question')
+                        q.question_type = block.content.get('question_type', 'text')
+                        q.choices = ",".join(block.content.get('choices', [])) if isinstance(block.content.get('choices'), list) else ""
+                        q.is_required = block.content.get('is_required', False)
+                        q.help_text = block.content.get('help_text', '')
+                        q.order_num = block.order_index
+                else:
+                    q_entry = Question(
+                        questionnaire_id=quest.id,
+                        text=block.content.get('label', 'Question'),
+                        question_type=block.content.get('question_type', 'text'),
+                        choices=",".join(block.content.get('choices', [])) if isinstance(block.content.get('choices'), list) else "",
+                        order_num=block.order_index,
+                        is_required=block.content.get('is_required', False),
+                        help_text=block.content.get('help_text', '')
+                    )
+                    db.session.add(q_entry)
+                    db.session.flush()
+                    new_content = dict(block.content)
+                    new_content['question_id'] = q_entry.id
+                    block.content = new_content
+                    
+        if 'order_index' in data:
+            block.order_index = data['order_index']
+            if block.block_type == 'question':
+                q_id = block.content.get('question_id') if block.content else None
+                if q_id:
+                    q = Question.query.get(q_id)
+                    if q:
+                        q.order_num = block.order_index
+                        
+        if 'parent_block_id' in data:
+            block.parent_block_id = data['parent_block_id']
+            
+        db.session.commit()
+        return jsonify({'success': True, 'block': block.to_dict()})
+
+    @app.route('/api/blocks/<int:block_id>', methods=['DELETE'])
+    @login_required
+    def delete_block(block_id):
+        """Supprime un bloc et sa question historique associée."""
+        block = QuestionnaireBlock.query.get_or_404(block_id)
+        quest = block.questionnaire
+        is_owner = (quest.project.user_id == current_user.id)
+        share = SharedQuestionnaire.query.filter_by(questionnaire_id=quest.id, shared_with_user_id=current_user.id).first()
+        if not (is_owner or (share and share.permission == 'edit')):
+            return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
+            
+        if block.block_type == 'question':
+            q_id = block.content.get('question_id') if block.content else None
+            if q_id:
+                q = Question.query.get(q_id)
+                if q:
+                    db.session.delete(q)
+                    
+        db.session.delete(block)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Bloc supprimé.'})
+
+    @app.route('/api/questionnaires/<int:questionnaire_id>/blocks/reorder', methods=['PUT'])
+    @login_required
+    def reorder_blocks(questionnaire_id):
+        """Met à jour l'ordre de tous les blocs et des questions associées."""
+        quest = Questionnaire.query.get_or_404(questionnaire_id)
+        is_owner = (quest.project.user_id == current_user.id)
+        share = SharedQuestionnaire.query.filter_by(questionnaire_id=questionnaire_id, shared_with_user_id=current_user.id).first()
+        if not (is_owner or (share and share.permission == 'edit')):
+            return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
+            
+        data = request.get_json() or {}
+        block_orders = data.get('blocks', [])
+        
+        for bo in block_orders:
+            b = QuestionnaireBlock.query.filter_by(id=bo['id'], questionnaire_id=questionnaire_id).first()
+            if b:
+                b.order_index = bo['order_index']
+                if b.block_type == 'question':
+                    q_id = b.content.get('question_id') if b.content else None
+                    if q_id:
+                        q = Question.query.get(q_id)
+                        if q:
+                            q.order_num = bo['order_index']
+                            
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Ordre des blocs sauvegardé.'})
+
+    # --- API BIBLIOTHÈQUE DE BLOCS ---
+    @app.route('/api/library', methods=['GET'])
+    @login_required
+    def get_library_blocks():
+        """Récupère les blocs de la bibliothèque de l'utilisateur."""
+        blocks = BlockLibrary.query.filter(
+            (BlockLibrary.user_id == current_user.id) | (BlockLibrary.is_shared == True)
+        ).order_by(BlockLibrary.created_at.desc()).all()
+        return jsonify([b.to_dict() for b in blocks])
+
+    @app.route('/api/library', methods=['POST'])
+    @login_required
+    def add_library_block():
+        """Sauvegarde un bloc dans la bibliothèque."""
+        data = request.get_json() or {}
+        block_type = data.get('block_type')
+        name = data.get('name')
+        content = data.get('content', {})
+        is_shared = data.get('is_shared', False)
+        
+        if not block_type or not name:
+            return jsonify({'success': False, 'message': 'Type de bloc et nom requis.'}), 400
+            
+        lib_block = BlockLibrary(
+            user_id=current_user.id,
+            block_type=block_type,
+            name=name,
+            content=content,
+            is_shared=is_shared
+        )
+        db.session.add(lib_block)
+        db.session.commit()
+        return jsonify({'success': True, 'block': lib_block.to_dict()}), 201
+
+    @app.route('/api/library/<int:library_id>', methods=['DELETE'])
+    @login_required
+    def delete_library_block(library_id):
+        """Supprime un bloc de la bibliothèque."""
+        lib_block = BlockLibrary.query.get_or_404(library_id)
+        if lib_block.user_id != current_user.id:
+            return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
+            
+        db.session.delete(lib_block)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Bloc de bibliothèque supprimé.'})
+
+    # --- API MODÈLES ET IMPORTS ---
+    @app.route('/api/templates', methods=['GET'])
+    @login_required
+    def get_templates():
+        """Liste tous les modèles de questionnaires disponibles."""
+        templates = Questionnaire.query.filter_by(is_template=True).all()
+        return jsonify([t.to_dict() for t in templates])
+
+    @app.route('/api/questionnaires/from-template', methods=['POST'])
+    @login_required
+    def create_from_template():
+        """Crée un nouveau questionnaire à partir d'un modèle (seeding dynamique)."""
+        data = request.get_json() or {}
+        template_id = data.get('template_id')  # ID ou clé de catégorie comme 'mission'
+        project_id = data.get('project_id')
+        title = data.get('title')
+        
+        if not template_id or not project_id or not title:
+            return jsonify({'success': False, 'message': 'template_id, project_id et title requis.'}), 400
+            
+        new_quest = Questionnaire(
+            project_id=project_id,
+            title=title,
+            description=f"Questionnaire créé à partir du modèle {template_id}",
+            status='draft'
+        )
+        db.session.add(new_quest)
+        db.session.flush()
+        
+        blocks_to_create = []
+        
+        if str(template_id).isdigit():
+            template = Questionnaire.query.get(template_id)
+            if template:
+                new_quest.description = template.description
+                for b in template.blocks:
+                    blocks_to_create.append({
+                        'block_type': b.block_type,
+                        'content': b.content
+                    })
+        else:
+            category = str(template_id).lower()
+            if category == 'mission':
+                blocks_to_create = [
+                    {'block_type': 'title', 'content': {'title': title, 'description': 'Suivi des missions de terrain'}},
+                    {'block_type': 'section', 'content': {'title': '1. Informations Générales'}},
+                    {'block_type': 'question', 'content': {'label': 'Date de la mission', 'question_type': 'text', 'help_text': 'Format AAAA-MM-JJ'}},
+                    {'block_type': 'question', 'content': {'label': 'Nom de l\'enquêteur / responsable', 'question_type': 'text'}},
+                    {'block_type': 'section', 'content': {'title': '2. Observations'}},
+                    {'block_type': 'question', 'content': {'label': 'Observations terrain clés', 'question_type': 'text'}},
+                    {'block_type': 'question', 'content': {'label': 'Risques ou points bloquants relevés', 'question_type': 'text'}},
+                    {'block_type': 'signature', 'content': {'label': 'Signature du responsable'}}
+                ]
+            elif category == 'evaluation':
+                blocks_to_create = [
+                    {'block_type': 'title', 'content': {'title': title, 'description': 'Évaluation des réalisations et impacts'}},
+                    {'block_type': 'section', 'content': {'title': '1. Performances'}},
+                    {'block_type': 'question', 'content': {'label': 'Niveau global de réussite des objectifs', 'question_type': 'select', 'choices': ['Excellent', 'Satisfaisant', 'Insatisfaisant']}},
+                    {'block_type': 'question', 'content': {'label': 'Principaux facteurs de succès ou d\'échec', 'question_type': 'text'}},
+                    {'block_type': 'gps', 'content': {'label': 'Coordonnées GPS du site visité'}},
+                    {'block_type': 'photo', 'content': {'label': 'Preuve photographique de la réalisation'}}
+                ]
+            elif category == 'satisfaction':
+                blocks_to_create = [
+                    {'block_type': 'title', 'content': {'title': title, 'description': 'Enquête de satisfaction des usagers et bénéficiaires'}},
+                    {'block_type': 'section', 'content': {'title': '1. Évaluation du Service'}},
+                    {'block_type': 'question', 'content': {'label': 'Votre niveau global de satisfaction', 'question_type': 'select', 'choices': ['Très satisfait', 'Satisfait', 'Insatisfaisant', 'Très insatisfait']}},
+                    {'block_type': 'question', 'content': {'label': 'Le service répond-il à vos besoins quotidiens ?', 'question_type': 'select', 'choices': ['Oui, entièrement', 'Partiellement', 'Non, pas du tout']}},
+                    {'block_type': 'comment', 'content': {'label': 'Remarques et suggestions d\'amélioration'}}
+                ]
+            elif category == 'focus_group':
+                blocks_to_create = [
+                    {'block_type': 'title', 'content': {'title': title, 'description': 'Synthèse des discussions de Focus Group'}},
+                    {'block_type': 'section', 'content': {'title': '1. Contexte du Groupe'}},
+                    {'block_type': 'question', 'content': {'label': 'Nombre total de participants', 'question_type': 'text'}},
+                    {'block_type': 'question', 'content': {'label': 'Principaux points de consensus', 'question_type': 'text'}},
+                    {'block_type': 'question', 'content': {'label': 'Principaux points de divergence', 'question_type': 'text'}}
+                ]
+            else:
+                blocks_to_create = [
+                    {'block_type': 'title', 'content': {'title': title, 'description': 'Nouveau questionnaire personnalisé'}}
+                ]
+                
+        for idx, b_data in enumerate(blocks_to_create):
+            block_type = b_data['block_type']
+            content = b_data['content']
+            
+            if block_type == 'question':
+                q_entry = Question(
+                    questionnaire_id=new_quest.id,
+                    text=content.get('label', 'Question'),
+                    question_type=content.get('question_type', 'text'),
+                    choices=",".join(content.get('choices', [])) if isinstance(content.get('choices'), list) else "",
+                    order_num=idx,
+                    is_required=content.get('is_required', False),
+                    help_text=content.get('help_text', '')
+                )
+                db.session.add(q_entry)
+                db.session.flush()
+                content = dict(content)
+                content['question_id'] = q_entry.id
+                
+            block = QuestionnaireBlock(
+                questionnaire_id=new_quest.id,
+                block_type=block_type,
+                order_index=idx,
+                content=content
+            )
+            db.session.add(block)
+            
+        db.session.commit()
+        return jsonify({'success': True, 'questionnaire': new_quest.to_dict()}), 201
+
+    @app.route('/api/questionnaires/import', methods=['POST'])
+    @login_required
+    def import_questionnaire_file():
+        """Analyse un fichier (Word/PDF/Excel) et extrait la structure avec l'IA."""
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'message': 'Aucun fichier fourni.'}), 400
+            
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'success': False, 'message': 'Fichier vide.'}), 400
+            
+        filename = secure_filename(file.filename)
+        file_stream = io.BytesIO(file.read())
+        
+        file_text = extract_text_from_file(file_stream, filename)
+        
+        if not file_text:
+            return jsonify({'success': False, 'message': 'Impossible d\'extraire du texte de ce fichier.'}), 400
+            
+        from ai_service import import_questionnaire_from_text
+        structure = import_questionnaire_from_text(file_text, filename)
+        
+        return jsonify({'success': True, 'structure': structure})
+
+    @app.route('/api/questionnaires/import/confirm', methods=['POST'])
+    @login_required
+    def confirm_import_questionnaire():
+        """Valide la structure importée et crée le questionnaire définitif en blocs."""
+        data = request.get_json() or {}
+        project_id = data.get('project_id')
+        structure = data.get('structure', {})
+        
+        if not project_id or not structure.get('title'):
+            return jsonify({'success': False, 'message': 'project_id et structure de questionnaire requis.'}), 400
+            
+        quest = Questionnaire(
+            project_id=project_id,
+            title=structure['title'],
+            description=structure.get('description', ''),
+            status='draft'
+        )
+        db.session.add(quest)
+        db.session.flush()
+        
+        blocks = structure.get('blocks', [])
+        for idx, b in enumerate(blocks):
+            block = QuestionnaireBlock(
+                questionnaire_id=quest.id,
+                block_type=b['block_type'],
+                order_index=idx,
+                content=b.get('content', {})
+            )
+            db.session.add(block)
+            
+        db.session.commit()
+        return jsonify({'success': True, 'questionnaire': quest.to_dict()}), 201
+
+    # --- API ASSISTANT IA CRÉATION ---
+    @app.route('/api/assistant/create-questionnaire', methods=['POST'])
+    @login_required
+    def generate_questionnaire_ai():
+        """Génère un questionnaire en blocs complet à partir d'une description descriptive."""
+        data = request.get_json() or {}
+        prompt = data.get('prompt')
+        if not prompt:
+            return jsonify({'success': False, 'message': 'Le prompt de description est requis.'}), 400
+            
+        from ai_service import generate_questionnaire_from_prompt
+        structure = generate_questionnaire_from_prompt(prompt)
+        
+        return jsonify({'success': True, 'structure': structure})
+
+    # --- API EXPORTS MULTI-FORMATS ---
+    @app.route('/api/questionnaires/<int:questionnaire_id>/export/word', methods=['GET'])
+    @login_required
+    def export_word(questionnaire_id):
+        """Exporte le questionnaire en format Word (.docx)."""
+        quest = Questionnaire.query.get_or_404(questionnaire_id)
+        if quest.project.user_id != current_user.id:
+            return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
+            
+        from export_service import export_to_word
+        docx_data = export_to_word(quest)
+        
+        response = make_response(docx_data)
+        response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        response.headers['Content-Disposition'] = f'attachment; filename=Questionnaire_{secure_filename(quest.title)}.docx'
+        return response
+
+    @app.route('/api/questionnaires/<int:questionnaire_id>/export/excel', methods=['GET'])
+    @login_required
+    def export_excel(questionnaire_id):
+        """Exporte le questionnaire en format Excel (.xlsx)."""
+        quest = Questionnaire.query.get_or_404(questionnaire_id)
+        if quest.project.user_id != current_user.id:
+            return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
+            
+        from export_service import export_to_excel
+        xlsx_data = export_to_excel(quest)
+        
+        response = make_response(xlsx_data)
+        response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        response.headers['Content-Disposition'] = f'attachment; filename=Questionnaire_{secure_filename(quest.title)}.xlsx'
+        return response
+
+    @app.route('/api/questionnaires/<int:questionnaire_id>/export/pdf', methods=['GET'])
+    @login_required
+    def export_pdf(questionnaire_id):
+        """Exporte le questionnaire en PDF mis en page."""
+        quest = Questionnaire.query.get_or_404(questionnaire_id)
+        if quest.project.user_id != current_user.id:
+            return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
+            
+        from export_service import export_to_pdf
+        pdf_data = export_to_pdf(quest)
+        
+        response = make_response(pdf_data)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename=Questionnaire_{secure_filename(quest.title)}.pdf'
+        return response
+
+    @app.route('/api/questionnaires/<int:questionnaire_id>/export/mobile', methods=['GET'])
+    @login_required
+    def export_mobile(questionnaire_id):
+        """Renvoie le questionnaire structuré en JSON optimisé pour terminaux mobiles."""
+        quest = Questionnaire.query.get_or_404(questionnaire_id)
+        if quest.project.user_id != current_user.id:
+            return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
+            
+        return jsonify(quest.to_dict())
+
     return app
 
 def secure_date(date_str):
@@ -726,6 +1188,40 @@ def secure_date(date_str):
     except Exception:
         pass
     return datetime.now().date()
+
+def extract_text_from_file(file_stream, filename):
+    """Extrait le texte brut d'un fichier Word, Excel, PDF ou texte brut."""
+    ext = filename.split('.')[-1].lower()
+    if ext == 'docx':
+        import docx
+        doc = docx.Document(file_stream)
+        return "\n".join([p.text for p in doc.paragraphs])
+    elif ext in ['xlsx', 'xls']:
+        import openpyxl
+        wb = openpyxl.load_workbook(file_stream, data_only=True)
+        lines = []
+        for sheet in wb.worksheets:
+            for row in sheet.iter_rows(values_only=True):
+                lines.append(" ".join([str(v) for v in row if v is not None]))
+        return "\n".join(lines)
+    elif ext == 'pdf':
+        try:
+            import pypdf
+            reader = pypdf.PdfReader(file_stream)
+            text = ""
+            for page in reader.pages:
+                t = page.extract_text()
+                if t:
+                    text += t + "\n"
+            return text
+        except Exception as e:
+            return f"Erreur d'extraction PDF : {e}"
+    else:
+        try:
+            return file_stream.read().decode('utf-8', errors='ignore')
+        except:
+            return ""
+
 
 # Instanciation globale au niveau du module pour gunicorn / Vercel WSGI
 app = create_app()

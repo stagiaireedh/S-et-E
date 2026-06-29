@@ -179,11 +179,13 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Modals
     const modalProject = document.getElementById('modal-project');
-    const modalQuestionnaire = document.getElementById('modal-questionnaire');
+    const modalCreateQuestionnaireSelect = document.getElementById('modal-create-questionnaire-select');
+    const modalImportQuestionnaire = document.getElementById('modal-import-questionnaire');
+    const modalAiAssistantQuest = document.getElementById('modal-ai-assistant-quest');
     
     // Formulaires
     const formNewProject = document.getElementById('form-new-project');
-    const formNewQuestionnaire = document.getElementById('form-new-questionnaire');
+    const formSelectTemplateCreate = document.getElementById('form-select-template-create');
     const formInterviewSaisie = document.getElementById('form-interview-saisie');
 
     // --- 1. GESTION DES ONGLETS ---
@@ -694,14 +696,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectQuestionnaire = document.getElementById('collecte-questionnaire-select');
     const saisieQuestionnaireId = document.getElementById('saisie-questionnaire-id');
     const dynamicQuestionsContainer = document.getElementById('dynamic-questions-container');
-    const btnSubmitSaisie = document.getElementById('btn-submit-saisie');
-    
-    // Charger questionnaires
-    async function loadQuestionnairesList() {
+    const btnSubmitSaisie = document.get    async function loadQuestionnairesList() {
         if (!activeProjectId) {
             selectQuestionnaire.innerHTML = '<option value="" disabled selected>Créer un projet d\'abord...</option>';
             const btnShare = document.getElementById('btn-share-questionnaire');
             if (btnShare) btnShare.style.display = 'none';
+            if (btnEditActiveQuest) btnEditActiveQuest.style.display = 'none';
             return;
         }
         
@@ -719,6 +719,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (activeQuestionnaireId) {
                 selectQuestionnaire.value = activeQuestionnaireId;
                 renderQuestionsFields();
+                if (btnEditActiveQuest) btnEditActiveQuest.style.display = 'block';
+            } else {
+                if (btnEditActiveQuest) btnEditActiveQuest.style.display = 'none';
             }
         } catch (err) {
             console.error("Erreur chargement questionnaires:", err);
@@ -734,8 +737,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const btnShare = document.getElementById('btn-share-questionnaire');
         if (activeQuestionnaireId) {
             btnShare.style.display = 'block';
+            if (btnEditActiveQuest) btnEditActiveQuest.style.display = 'block';
         } else {
             btnShare.style.display = 'none';
+            if (btnEditActiveQuest) btnEditActiveQuest.style.display = 'none';
         }
     });
     
@@ -746,31 +751,170 @@ document.addEventListener('DOMContentLoaded', () => {
         dynamicQuestionsContainer.innerHTML = '';
         btnSubmitSaisie.disabled = false;
         
-        quest.questions.forEach(q => {
-            const div = document.createElement('div');
-            div.className = 'question-field-block';
+        const blocks = (quest.blocks || []).sort((a, b) => a.order_index - b.order_index);
+        
+        if (blocks.length === 0) {
+            dynamicQuestionsContainer.innerHTML = '<p class="text-muted text-center py-4">Ce questionnaire ne contient aucun bloc. Cliquez sur "Éditer" pour en concevoir.</p>';
+            return;
+        }
+        
+        blocks.forEach(block => {
+            const content = block.content || {};
             
-            let inputHtml = '';
-            if (q.question_type === 'select') {
-                inputHtml = `<select name="q_${q.id}" class="custom-select" required>`;
-                inputHtml += '<option value="" disabled selected>Sélectionner une option...</option>';
-                q.choices.forEach(c => {
-                    inputHtml += `<option value="${c}">${c}</option>`;
-                });
-                inputHtml += '</select>';
-            } else {
-                inputHtml = `<textarea name="q_${q.id}" rows="3" placeholder="Écrire la réponse textuelle de l'entretien..." required></textarea>`;
+            if (block.block_type === 'title') {
+                const header = document.createElement('div');
+                header.className = 'form-block-header text-center my-4';
+                header.innerHTML = `
+                    <h3 style="font-size: 16px; font-weight:800; margin-bottom:4px;">${content.title || quest.title}</h3>
+                    <p class="text-muted" style="font-size: 12px; max-width:600px; margin:0 auto;">${content.description || ''}</p>
+                `;
+                dynamicQuestionsContainer.appendChild(header);
             }
-            
-            div.innerHTML = `
-                <div class="form-group">
-                    <label>${q.order_num}. ${q.text}</label>
-                    ${inputHtml}
-                </div>
-            `;
-            dynamicQuestionsContainer.appendChild(div);
+            else if (block.block_type === 'section') {
+                const section = document.createElement('div');
+                section.className = 'form-block-section my-3';
+                section.innerHTML = `
+                    <h4 style="font-size: 13px; font-weight:700; color:var(--indigo); border-bottom:1px solid var(--border-color); padding-bottom:4px; text-transform:uppercase; letter-spacing:0.5px;">${content.title || 'Section'}</h4>
+                `;
+                dynamicQuestionsContainer.appendChild(section);
+            }
+            else if (block.block_type === 'text') {
+                const text = document.createElement('div');
+                text.className = 'form-block-text my-2 text-muted';
+                text.innerHTML = `
+                    <p style="font-size: 12.5px; line-height: 1.5; margin: 0;">${content.text || ''}</p>
+                `;
+                dynamicQuestionsContainer.appendChild(text);
+            }
+            else if (block.block_type === 'question') {
+                const div = document.createElement('div');
+                div.className = 'question-field-block my-3';
+                
+                let inputHtml = '';
+                const qId = content.question_id || `block_${block.id}`;
+                
+                if (content.question_type === 'select') {
+                    inputHtml = `<select name="q_${qId}" class="custom-select" ${content.is_required ? 'required' : ''}>`;
+                    inputHtml += '<option value="" disabled selected>Sélectionner une option...</option>';
+                    (content.choices || []).forEach(c => {
+                        inputHtml += `<option value="${c}">${c}</option>`;
+                    });
+                    inputHtml += '</select>';
+                } else {
+                    inputHtml = `<textarea name="q_${qId}" rows="3" placeholder="${content.help_text || 'Écrire la réponse de la question...'}" ${content.is_required ? 'required' : ''}></textarea>`;
+                }
+                
+                const reqStar = content.is_required ? '<span class="text-danger">*</span>' : '';
+                
+                div.innerHTML = `
+                    <div class="form-group">
+                        <label class="font-weight-bold" style="font-size:13px; display:block; margin-bottom:4px;">❓ ${content.label || 'Question'} ${reqStar}</label>
+                        ${content.help_text ? `<small class="text-muted d-block mb-1" style="font-size:11px; margin-top:-2px;">${content.help_text}</small>` : ''}
+                        ${inputHtml}
+                    </div>
+                `;
+                dynamicQuestionsContainer.appendChild(div);
+            }
+            else {
+                const div = document.createElement('div');
+                div.className = 'question-field-block my-3';
+                const qId = `block_${block.id}`;
+                const label = content.label || block.block_type.toUpperCase();
+                const icon = getBlockIcon(block.block_type);
+                
+                let inputHtml = '';
+                if (block.block_type === 'comment') {
+                    inputHtml = `<textarea name="q_${qId}" rows="3" placeholder="${content.help_text || 'Entrez vos commentaires...'}" ${content.is_required ? 'required' : ''}></textarea>`;
+                } else if (block.block_type === 'checkbox') {
+                    inputHtml = '<div class="checkbox-list-container d-flex flex-column gap-2 mt-2">';
+                    (content.options || []).forEach((opt, oIdx) => {
+                        inputHtml += `
+                            <label class="d-flex align-items-center gap-2" style="font-weight:normal; font-size:12.5px; margin:0;">
+                                <input type="checkbox" name="q_${qId}_opt_${oIdx}" value="${opt}">
+                                <span>${opt}</span>
+                            </label>
+                        `;
+                    });
+                    inputHtml += '</div>';
+                } else if (block.block_type === 'gps') {
+                    inputHtml = `
+                        <div class="d-flex gap-2 align-items-center mt-1">
+                            <input type="text" name="q_${qId}" id="gps-input-${block.id}" class="form-control" style="font-size:13px; max-width: 250px;" placeholder="Latitude, Longitude" readonly ${content.is_required ? 'required' : ''}>
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="getCurrentGPSLocation(${block.id})">📍 Capturer GPS</button>
+                        </div>
+                    `;
+                } else if (block.block_type === 'photo') {
+                    inputHtml = `
+                        <div class="photo-capture-wrapper mt-1">
+                            <input type="file" name="q_${qId}" accept="image/*" capture="environment" class="form-control" style="font-size:12.5px; max-width: 350px;" ${content.is_required ? 'required' : ''}>
+                        </div>
+                    `;
+                } else if (block.block_type === 'signature') {
+                    inputHtml = `
+                        <div class="signature-input-wrapper mt-1">
+                            <input type="text" name="q_${qId}" class="form-control" placeholder="Écrivez votre nom pour signature..." style="font-size:13px; max-width: 350px;" ${content.is_required ? 'required' : ''}>
+                        </div>
+                    `;
+                } else if (block.block_type === 'file') {
+                    inputHtml = `
+                        <div class="file-attachment-wrapper mt-1">
+                            <input type="file" name="q_${qId}" class="form-control" style="font-size:12.5px; max-width: 350px;" ${content.is_required ? 'required' : ''}>
+                        </div>
+                    `;
+                } else if (block.block_type === 'matrix') {
+                    inputHtml = '<div class="matrix-input-table-wrapper overflow-auto mt-2">';
+                    inputHtml += '<table class="table table-bordered table-sm" style="font-size:12px; background: rgba(255,255,255,0.02);"><thead><tr><th></th>';
+                    (content.columns || []).forEach(col => {
+                        inputHtml += `<th>${col}</th>`;
+                    });
+                    inputHtml += '</tr></thead><tbody>';
+                    (content.rows || []).forEach((row, rIdx) => {
+                        inputHtml += `<tr><td><strong>${row}</strong></td>`;
+                        (content.columns || []).forEach((col, cIdx) => {
+                            inputHtml += `<td><input type="radio" name="q_${qId}_row_${rIdx}" value="${col}"></td>`;
+                        });
+                        inputHtml += '</tr>';
+                    });
+                    inputHtml += '</tbody></table></div>';
+                }
+                
+                const reqStar = content.is_required ? '<span class="text-danger">*</span>' : '';
+                
+                div.innerHTML = `
+                    <div class="form-group">
+                        <label class="font-weight-bold" style="font-size:13px; display:block; margin-bottom:4px;">${icon} ${label} ${reqStar}</label>
+                        ${content.help_text ? `<small class="text-muted d-block mb-1" style="font-size:11px; margin-top:-2px;">${content.help_text}</small>` : ''}
+                        ${inputHtml}
+                    </div>
+                `;
+                dynamicQuestionsContainer.appendChild(div);
+            }
         });
     }
+    
+    window.getCurrentGPSLocation = function(blockId) {
+        if (!navigator.geolocation) {
+            showToast("La géolocalisation n'est pas supportée par votre navigateur.", "error");
+            return;
+        }
+        
+        showToast("Recherche de la position GPS...", "info");
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const lat = position.coords.latitude.toFixed(6);
+                const lng = position.coords.longitude.toFixed(6);
+                const input = document.getElementById(`gps-input-${blockId}`);
+                if (input) {
+                    input.value = `${lat}, ${lng}`;
+                    showToast("Position GPS capturée avec succès !", "success");
+                }
+            },
+            (error) => {
+                showToast(`Erreur GPS : ${error.message}`, "error");
+            },
+            { enableHighAccuracy: true, timeout: 5000 }
+        );
+    };
     
     // Saisie formulaire d'entretien
     formInterviewSaisie.addEventListener('submit', async (e) => {
@@ -787,10 +931,45 @@ document.addEventListener('DOMContentLoaded', () => {
         const answers = {};
         const quest = questionnaires.find(q => q.id === questionnaireId);
         if (quest) {
-            quest.questions.forEach(q => {
-                const el = formInterviewSaisie.querySelector(`[name="q_${q.id}"]`);
-                if (el) {
-                    answers[q.id] = el.value;
+            const blocks = quest.blocks || [];
+            blocks.forEach(block => {
+                const content = block.content || {};
+                if (block.block_type === 'question') {
+                    const qId = content.question_id || `block_${block.id}`;
+                    const el = formInterviewSaisie.querySelector(`[name="q_${qId}"]`);
+                    if (el) {
+                        if (content.question_id) {
+                            answers[content.question_id] = el.value;
+                        } else {
+                            answers[`block_${block.id}`] = el.value;
+                        }
+                    }
+                } else {
+                    const qId = `block_${block.id}`;
+                    if (block.block_type === 'checkbox') {
+                        const checked = [];
+                        (content.options || []).forEach((opt, oIdx) => {
+                            const checkbox = formInterviewSaisie.querySelector(`[name="q_${qId}_opt_${oIdx}"]`);
+                            if (checkbox && checkbox.checked) {
+                                checked.push(opt);
+                            }
+                        });
+                        answers[qId] = checked.join(', ');
+                    } else if (block.block_type === 'matrix') {
+                        const matrixVals = [];
+                        (content.rows || []).forEach((row, rIdx) => {
+                            const radio = formInterviewSaisie.querySelector(`[name="q_${qId}_row_${rIdx}"]:checked`);
+                            if (radio) {
+                                matrixVals.push(`${row}: ${radio.value}`);
+                            }
+                        });
+                        answers[qId] = matrixVals.join(' | ');
+                    } else {
+                        const el = formInterviewSaisie.querySelector(`[name="q_${qId}"]`);
+                        if (el) {
+                            answers[qId] = el.value;
+                        }
+                    }
                 }
             });
         }
@@ -834,7 +1013,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 const btnShare = document.getElementById('btn-share-questionnaire');
                 if (btnShare) btnShare.style.display = 'none';
-
+                if (btnEditActiveQuest) btnEditActiveQuest.style.display = 'none';
+ 
                 switchTab('dashboard');
             }
         } catch (err) {
@@ -842,96 +1022,896 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    // --- MODAL CREATION DE QUESTIONNAIRE ---
+    // --- MODAL CREATION DE QUESTIONNAIRE (CANVA/NOTION STYLE) ---
     const btnCreateQuestionnaire = document.getElementById('btn-create-questionnaire');
-    const btnAddQuestionRow = document.getElementById('btn-add-question-row');
-    const questionsListDiv = document.getElementById('modal-questions-list');
+    const formSelectTemplateCreate = document.getElementById('form-select-template-create');
+    const modalCreateQuestionnaireSelect = document.getElementById('modal-create-questionnaire-select');
+    const builderOverlay = document.getElementById('builder-overlay');
+    const builderCanvas = document.getElementById('builder-canvas-area');
+    const builderSavedBlocksContainer = document.getElementById('builder-saved-blocks-container');
+    const propertiesPanelContent = document.getElementById('properties-panel-content');
+    const btnEditActiveQuest = document.getElementById('btn-edit-active-questionnaire');
     
+    // Variables locales pour le builder
+    let activeBuilderQuestionnaireId = null;
+    let builderBlocks = [];
+    let selectedBlockId = null;
+    
+    // Ouvrir la sélection de modèle
     btnCreateQuestionnaire.addEventListener('click', () => {
-        if (!activeProjectId) return;
-        modalQuestionnaire.classList.add('active');
-        questionsListDiv.innerHTML = '';
-        addQuestionRow();
+        if (!activeProjectId) {
+            showToast("Veuillez sélectionner un projet actif d'abord.", "warning");
+            return;
+        }
+        document.getElementById('select-template-title').value = '';
+        modalCreateQuestionnaireSelect.style.display = 'flex';
     });
     
-    document.getElementById('btn-close-quest-modal').addEventListener('click', () => modalQuestionnaire.classList.remove('active'));
-    document.getElementById('btn-cancel-quest-modal').addEventListener('click', () => modalQuestionnaire.classList.remove('active'));
+    // Fermer les modales de création
+    document.getElementById('btn-close-select-template-modal').addEventListener('click', () => {
+        modalCreateQuestionnaireSelect.style.display = 'none';
+    });
+    document.getElementById('btn-cancel-select-template').addEventListener('click', () => {
+        modalCreateQuestionnaireSelect.style.display = 'none';
+    });
     
-    function addQuestionRow() {
-        const div = document.createElement('div');
-        div.className = 'modal-question-row';
-        div.innerHTML = `
-            <input type="text" class="quest-text" placeholder="Entrez la question..." required>
-            <select class="quest-type custom-select">
-                <option value="text">Texte libre</option>
-                <option value="select">Choix Unique</option>
-            </select>
-            <input type="text" class="quest-choices" placeholder="Option 1, Option 2 (séparées par virgules)" style="display:none; width: 220px;">
-            <button type="button" class="btn-remove-row">&times;</button>
-        `;
+    // Créer à partir d'un template
+    formSelectTemplateCreate.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const title = document.getElementById('select-template-title').value;
+        const template_id = formSelectTemplateCreate.querySelector('input[name="template_cat"]:checked').value;
         
-        const selectType = div.querySelector('.quest-type');
-        const inputChoices = div.querySelector('.quest-choices');
-        
-        selectType.addEventListener('change', (e) => {
-            if (e.target.value === 'select') {
-                inputChoices.style.display = 'block';
-                inputChoices.required = true;
-            } else {
-                inputChoices.style.display = 'none';
-                inputChoices.required = false;
-                inputChoices.value = '';
+        try {
+            const res = await requestAPI('/api/questionnaires/from-template', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    project_id: activeProjectId,
+                    template_id: template_id,
+                    title: title
+                })
+            });
+            if (res.success) {
+                modalCreateQuestionnaireSelect.style.display = 'none';
+                showToast("Questionnaire créé avec succès !", "success");
+                loadQuestionnairesList();
+                openVisualBuilder(res.questionnaire.id);
             }
-        });
+        } catch (err) {
+            console.error("Erreur de création à partir du modèle:", err);
+        }
+    });
+
+    // Ouvrir le constructeur visuel
+    async function openVisualBuilder(questionnaireId) {
+        activeBuilderQuestionnaireId = questionnaireId;
+        selectedBlockId = null;
+        propertiesPanelContent.innerHTML = '<p class="text-muted text-center py-5">Sélectionnez un bloc sur le canvas pour modifier ses propriétés.</p>';
         
-        div.querySelector('.btn-remove-row').addEventListener('click', () => {
-            div.remove();
-        });
-        
-        questionsListDiv.appendChild(div);
+        try {
+            const qDetails = questionnaires.find(q => q.id === questionnaireId) || {};
+            document.getElementById('builder-questionnaire-title').innerText = qDetails.title || "Questionnaire";
+            
+            const activeProject = projects.find(p => p.id === activeProjectId) || {};
+            document.getElementById('builder-project-name').innerText = activeProject.name || "Projet Actif";
+            
+            // Charger les blocs
+            builderBlocks = await requestAPI(`/api/questionnaires/${questionnaireId}/blocks`);
+            
+            // Rendre le canvas
+            renderCanvasBlocks();
+            
+            // Charger la bibliothèque de blocs personnalisés
+            loadLibraryBlocks();
+            
+            // Ouvrir l'overlay
+            builderOverlay.style.display = 'flex';
+        } catch (err) {
+            console.error("Erreur d'ouverture du constructeur:", err);
+        }
     }
     
-    btnAddQuestionRow.addEventListener('click', addQuestionRow);
-    
-    formNewQuestionnaire.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        
-        const title = document.getElementById('new-quest-title').value;
-        const description = document.getElementById('new-quest-desc').value;
-        
-        const questionRows = questionsListDiv.querySelectorAll('.modal-question-row');
-        const questions = [];
-        
-        questionRows.forEach(row => {
-            const text = row.querySelector('.quest-text').value;
-            const question_type = row.querySelector('.quest-type').value;
-            const choices = row.querySelector('.quest-choices').value;
-            
-            questions.push({ text, question_type, choices });
+    if (btnEditActiveQuest) {
+        btnEditActiveQuest.addEventListener('click', () => {
+            if (activeQuestionnaireId) {
+                openVisualBuilder(activeQuestionnaireId);
+            }
         });
+    }
+    
+    // Fermer le constructeur visuel
+    document.getElementById('btn-builder-close').addEventListener('click', () => {
+        builderOverlay.style.display = 'none';
+        activeBuilderQuestionnaireId = null;
+        loadQuestionnairesList();
+    });
+
+    // Rendre les blocs sur le Canvas
+    function renderCanvasBlocks() {
+        builderCanvas.innerHTML = '';
+        const emptyState = document.getElementById('canvas-empty-state-msg');
         
-        if (questions.length === 0) {
-            showToast("Veuillez ajouter au moins une question.", "warning");
+        if (builderBlocks.length === 0) {
+            if (emptyState) emptyState.style.display = 'flex';
+            builderCanvas.appendChild(emptyState);
+            document.getElementById('canvas-blocks-count').innerText = "0 blocs";
+            document.getElementById('canvas-progress-fill').style.width = "0%";
             return;
         }
         
-        const payload = { title, description, questions };
+        if (emptyState) emptyState.style.display = 'none';
         
+        // Trier par index
+        builderBlocks.sort((a, b) => a.order_index - b.order_index);
+        
+        let questionsCount = 0;
+        
+        builderBlocks.forEach((block, idx) => {
+            if (block.block_type === 'question') questionsCount++;
+            
+            const blockEl = document.createElement('div');
+            blockEl.className = `builder-block ${selectedBlockId === block.id ? 'selected' : ''}`;
+            blockEl.setAttribute('data-id', block.id);
+            blockEl.setAttribute('draggable', 'true');
+            
+            let innerContentHtml = '';
+            const content = block.content || {};
+            
+            if (block.block_type === 'title') {
+                innerContentHtml = `
+                    <div class="block-render-title">
+                        <h2 style="font-size: 20px; font-weight:800; margin-bottom:4px;">${content.title || 'Titre du Questionnaire'}</h2>
+                        <p class="text-muted" style="font-size:12px; margin:0;">${content.description || 'Description / objectifs...'}</p>
+                    </div>
+                `;
+            } else if (block.block_type === 'section') {
+                innerContentHtml = `
+                    <div class="block-render-section">
+                        <h3 style="font-size: 15px; font-weight:700; margin:0;">${content.title || 'Section sans titre'}</h3>
+                    </div>
+                `;
+            } else if (block.block_type === 'text') {
+                innerContentHtml = `
+                    <div class="block-render-text">
+                        <p style="font-size: 13px; margin:0; opacity:0.85;">${content.text || 'Entrez votre texte descriptif ici...'}</p>
+                    </div>
+                `;
+            } else if (block.block_type === 'question') {
+                const isReqStar = content.is_required ? '<span class="text-danger">*</span>' : '';
+                const qTypeLabel = content.question_type === 'select' ? 'Choix unique' : 'Texte libre';
+                innerContentHtml = `
+                    <div class="block-render-question">
+                        <label class="font-weight-bold" style="font-size:13.5px; display:block;">❓ ${content.label || 'Question sans titre'} ${isReqStar}</label>
+                        <div class="text-muted" style="font-size: 11px; margin-top: 2px;">Type : ${qTypeLabel} ${content.help_text ? `| Aide : ${content.help_text}` : ''}</div>
+                        ${content.question_type === 'select' ? 
+                            `<select class="custom-select mt-2" style="font-size:12.5px;" disabled><option>${(content.choices || []).join(', ') || 'Aucun choix défini'}</option></select>` : 
+                            `<textarea class="form-control mt-2" style="font-size:12.5px;" rows="2" placeholder="Zone de saisie libre..." disabled></textarea>`
+                        }
+                    </div>
+                `;
+            } else {
+                const label = content.label || block.block_type.toUpperCase();
+                const icon = getBlockIcon(block.block_type);
+                innerContentHtml = `
+                    <div class="block-render-generic">
+                        <div class="d-flex align-items-center gap-2">
+                            <span>${icon}</span>
+                            <span class="font-weight-bold" style="font-size:13.5px;">${label}</span>
+                        </div>
+                        <p class="text-muted small mt-1 mb-0" style="font-size:11px;">${content.help_text || 'Composant automatique de saisie terrain.'}</p>
+                    </div>
+                `;
+            }
+            
+            blockEl.innerHTML = `
+                <div class="block-controls">
+                    <button class="btn-block-action btn-duplicate-block" title="Dupliquer">👯</button>
+                    <button class="btn-block-action btn-save-lib" title="Sauvegarder dans bibliothèque">💾</button>
+                    <button class="btn-block-action btn-delete-block" title="Supprimer">🗑️</button>
+                </div>
+                ${innerContentHtml}
+            `;
+            
+            blockEl.addEventListener('click', (e) => {
+                if (e.target.closest('.block-controls')) return;
+                selectCanvasBlock(block.id);
+            });
+            
+            blockEl.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', JSON.stringify({ source: 'canvas', id: block.id }));
+                blockEl.classList.add('dragging');
+            });
+            
+            blockEl.addEventListener('dragend', () => {
+                blockEl.classList.remove('dragging');
+            });
+            
+            blockEl.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                blockEl.classList.add('drag-over');
+            });
+            
+            blockEl.addEventListener('dragleave', () => {
+                blockEl.classList.remove('drag-over');
+            });
+            
+            blockEl.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                blockEl.classList.remove('drag-over');
+                const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+                
+                if (data.source === 'canvas') {
+                    const draggedId = data.id;
+                    if (draggedId === block.id) return;
+                    
+                    const draggedIdx = builderBlocks.findIndex(b => b.id === draggedId);
+                    const targetIdx = builderBlocks.findIndex(b => b.id === block.id);
+                    
+                    const [draggedBlock] = builderBlocks.splice(draggedIdx, 1);
+                    builderBlocks.splice(targetIdx, 0, draggedBlock);
+                    
+                    builderBlocks.forEach((b, i) => b.order_index = i + 1);
+                    renderCanvasBlocks();
+                    
+                    await requestAPI(`/api/questionnaires/${activeBuilderQuestionnaireId}/blocks/reorder`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ blocks: builderBlocks.map(b => ({ id: b.id, order_index: b.order_index })) })
+                    });
+                } else if (data.source === 'library') {
+                    const newType = data.type;
+                    const qType = data.qtype;
+                    const contentDefault = data.content || getBlockDefaultContent(newType, qType);
+                    
+                    const targetIdx = builderBlocks.findIndex(b => b.id === block.id);
+                    
+                    try {
+                        const res = await requestAPI(`/api/questionnaires/${activeBuilderQuestionnaireId}/blocks`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                block_type: newType,
+                                content: contentDefault,
+                                order_index: targetIdx + 1
+                            })
+                        });
+                        if (res.success) {
+                            builderBlocks.splice(targetIdx + 1, 0, res.block);
+                            builderBlocks.forEach((b, i) => b.order_index = i + 1);
+                            renderCanvasBlocks();
+                            selectCanvasBlock(res.block.id);
+                        }
+                    } catch (err) {
+                        console.error("Erreur drop de bibliothèque:", err);
+                    }
+                }
+            });
+            
+            blockEl.querySelector('.btn-duplicate-block').addEventListener('click', () => duplicateBlock(block));
+            blockEl.querySelector('.btn-save-lib').addEventListener('click', () => saveBlockToLibrary(block));
+            blockEl.querySelector('.btn-delete-block').addEventListener('click', () => deleteCanvasBlock(block.id));
+            
+            builderCanvas.appendChild(blockEl);
+        });
+        
+        document.getElementById('canvas-blocks-count').innerText = `${builderBlocks.length} bloc(s)`;
+        const progressPct = builderBlocks.length > 0 ? Math.min(100, (questionsCount / builderBlocks.length) * 100) : 0;
+        document.getElementById('canvas-progress-fill').style.width = `${progressPct}%`;
+    }
+    
+    function selectCanvasBlock(blockId) {
+        selectedBlockId = blockId;
+        
+        const blockEls = builderCanvas.querySelectorAll('.builder-block');
+        blockEls.forEach(el => {
+            if (parseInt(el.getAttribute('data-id')) === blockId) {
+                el.classList.add('selected');
+            } else {
+                el.classList.remove('selected');
+            }
+        });
+        
+        const block = builderBlocks.find(b => b.id === blockId);
+        if (!block) return;
+        
+        renderPropertiesPanel(block);
+    }
+    
+    function renderPropertiesPanel(block) {
+        const content = block.content || {};
+        propertiesPanelContent.innerHTML = '';
+        
+        let fieldsHtml = '';
+        
+        if (block.block_type === 'title') {
+            fieldsHtml = `
+                <div class="property-group">
+                    <label>Titre principal</label>
+                    <input type="text" id="prop-title-text" class="form-control" value="${content.title || ''}">
+                </div>
+                <div class="property-group">
+                    <label>Description du Questionnaire</label>
+                    <textarea id="prop-desc-text" class="form-control" rows="3">${content.description || ''}</textarea>
+                </div>
+            `;
+        } else if (block.block_type === 'section') {
+            fieldsHtml = `
+                <div class="property-group">
+                    <label>Titre de la Section</label>
+                    <input type="text" id="prop-section-title" class="form-control" value="${content.title || ''}">
+                </div>
+            `;
+        } else if (block.block_type === 'text') {
+            fieldsHtml = `
+                <div class="property-group">
+                    <label>Texte explicatif</label>
+                    <textarea id="prop-text-content" class="form-control" rows="4">${content.text || ''}</textarea>
+                </div>
+            `;
+        } else if (block.block_type === 'question') {
+            const isTextSelected = content.question_type === 'text' ? 'selected' : '';
+            const isSelectSelected = content.question_type === 'select' ? 'selected' : '';
+            const choicesStr = (content.choices || []).join(', ');
+            
+            fieldsHtml = `
+                <div class="property-group">
+                    <label>Libellé de la Question</label>
+                    <input type="text" id="prop-q-label" class="form-control" value="${content.label || ''}">
+                </div>
+                <div class="property-group">
+                    <label>Type de Réponse</label>
+                    <select id="prop-q-type" class="custom-select">
+                        <option value="text" ${isTextSelected}>Texte libre</option>
+                        <option value="select" ${isSelectSelected}>Choix unique</option>
+                    </select>
+                </div>
+                <div class="property-group" id="prop-choices-wrapper" style="display: ${content.question_type === 'select' ? 'block' : 'none'};">
+                    <label>Choix (séparés par des virgules)</label>
+                    <input type="text" id="prop-q-choices" class="form-control" value="${choicesStr}">
+                </div>
+                <div class="property-group">
+                    <label>Aide à la saisie</label>
+                    <input type="text" id="prop-q-help" class="form-control" value="${content.help_text || ''}">
+                </div>
+                <div class="form-check mb-3">
+                    <input type="checkbox" id="prop-q-required" class="form-check-input" ${content.is_required ? 'checked' : ''}>
+                    <label class="form-check-label" for="prop-q-required">Obligatoire</label>
+                </div>
+            `;
+        } else {
+            fieldsHtml = `
+                <div class="property-group">
+                    <label>Libellé du champ</label>
+                    <input type="text" id="prop-generic-label" class="form-control" value="${content.label || block.block_type.toUpperCase()}">
+                </div>
+                <div class="property-group">
+                    <label>Instructions / aide</label>
+                    <input type="text" id="prop-generic-help" class="form-control" value="${content.help_text || ''}">
+                </div>
+            `;
+        }
+        
+        propertiesPanelContent.innerHTML = fieldsHtml;
+        
+        const bindInput = (id, propPath, valueGetter) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            
+            const handler = async () => {
+                const val = valueGetter(el);
+                const blockContent = block.content || {};
+                blockContent[propPath] = val;
+                block.content = blockContent;
+                
+                renderCanvasBlocks();
+                
+                await requestAPI(`/api/blocks/${block.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content: blockContent })
+                });
+            };
+            
+            el.addEventListener('input', debounce(handler, 400));
+            el.addEventListener('change', handler);
+        };
+        
+        if (block.block_type === 'title') {
+            bindInput('prop-title-text', 'title', el => el.value);
+            bindInput('prop-desc-text', 'description', el => el.value);
+        } else if (block.block_type === 'section') {
+            bindInput('prop-section-title', 'title', el => el.value);
+        } else if (block.block_type === 'text') {
+            bindInput('prop-text-content', 'text', el => el.value);
+        } else if (block.block_type === 'question') {
+            bindInput('prop-q-label', 'label', el => el.value);
+            bindInput('prop-q-help', 'help_text', el => el.value);
+            bindInput('prop-q-required', 'is_required', el => el.checked);
+            
+            const qTypeEl = document.getElementById('prop-q-type');
+            if (qTypeEl) {
+                qTypeEl.addEventListener('change', async (e) => {
+                    const type = e.target.value;
+                    const wrapper = document.getElementById('prop-choices-wrapper');
+                    wrapper.style.display = type === 'select' ? 'block' : 'none';
+                    
+                    block.content.question_type = type;
+                    renderCanvasBlocks();
+                    
+                    await requestAPI(`/api/blocks/${block.id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: block.content })
+                    });
+                });
+            }
+            
+            const choicesEl = document.getElementById('prop-q-choices');
+            if (choicesEl) {
+                choicesEl.addEventListener('input', debounce(async () => {
+                    const list = choicesEl.value.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                    block.content.choices = list;
+                    renderCanvasBlocks();
+                    
+                    await requestAPI(`/api/blocks/${block.id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: block.content })
+                    });
+                }, 400));
+            }
+        } else {
+            bindInput('prop-generic-label', 'label', el => el.value);
+            bindInput('prop-generic-help', 'help_text', el => el.value);
+        }
+    }
+    
+    function debounce(func, wait) {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+    }
+
+    async function duplicateBlock(block) {
         try {
-            const result = await requestAPI(`/api/projects/${activeProjectId}/questionnaires`, {
+            const res = await requestAPI(`/api/questionnaires/${activeBuilderQuestionnaireId}/blocks`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify({
+                    block_type: block.block_type,
+                    content: JSON.parse(JSON.stringify(block.content)),
+                    order_index: block.order_index + 1
+                })
             });
-            if (result.success) {
-                modalQuestionnaire.classList.remove('active');
-                formNewQuestionnaire.reset();
-                showToast("Questionnaire créé avec succès !", "success");
-                loadQuestionnairesList();
+            if (res.success) {
+                const insertIdx = builderBlocks.findIndex(b => b.id === block.id);
+                builderBlocks.splice(insertIdx + 1, 0, res.block);
+                builderBlocks.forEach((b, i) => b.order_index = i + 1);
+                renderCanvasBlocks();
+                selectCanvasBlock(res.block.id);
+                showToast("Bloc dupliqué !", "success");
             }
         } catch (err) {
-            console.error("Erreur lors de la création du questionnaire:", err);
+            console.error("Erreur duplication bloc:", err);
         }
+    }
+
+    async function deleteCanvasBlock(blockId) {
+        openConfirmModal("ce bloc", "Voulez-vous vraiment supprimer ce bloc du questionnaire ?", async () => {
+            try {
+                const res = await requestAPI(`/api/blocks/${blockId}`, { method: 'DELETE' });
+                if (res.success) {
+                    builderBlocks = builderBlocks.filter(b => b.id !== blockId);
+                    builderBlocks.forEach((b, i) => b.order_index = i + 1);
+                    renderCanvasBlocks();
+                    if (selectedBlockId === blockId) {
+                        selectedBlockId = null;
+                        propertiesPanelContent.innerHTML = '<p class="text-muted text-center py-5">Sélectionnez un bloc sur le canvas pour modifier ses propriétés.</p>';
+                    }
+                    showToast("Bloc supprimé avec succès !", "success");
+                }
+            } catch (err) {
+                console.error("Erreur suppression bloc:", err);
+            }
+        });
+    }
+    
+    async function saveBlockToLibrary(block) {
+        const name = prompt("Nom de ce modèle de bloc dans votre bibliothèque :", block.content.label || block.content.title || block.block_type);
+        if (!name) return;
+        
+        try {
+            const res = await requestAPI('/api/library', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    block_type: block.block_type,
+                    name: name,
+                    content: block.content,
+                    is_shared: false
+                })
+            });
+            if (res.success) {
+                showToast("Bloc sauvegardé dans votre bibliothèque !", "success");
+                loadLibraryBlocks();
+            }
+        } catch (err) {
+            console.error("Erreur sauvegarde bibliothèque:", err);
+        }
+    }
+    
+    async function loadLibraryBlocks() {
+        try {
+            const libBlocks = await requestAPI('/api/library');
+            builderSavedBlocksContainer.innerHTML = '';
+            
+            if (libBlocks.length === 0) {
+                builderSavedBlocksContainer.innerHTML = '<p class="text-muted text-center py-2" style="font-size: 11px;">Aucun bloc personnalisé.</p>';
+                return;
+            }
+            
+            libBlocks.forEach(lb => {
+                const div = document.createElement('div');
+                div.className = 'draggable-block-item';
+                div.setAttribute('draggable', 'true');
+                div.innerHTML = `
+                    <span>📦 ${lb.name}</span>
+                    <button class="btn-delete-lib-item" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:11px;">🗑️</button>
+                `;
+                
+                div.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', JSON.stringify({ source: 'library', type: lb.block_type, qtype: lb.content.question_type, content: lb.content }));
+                });
+                
+                div.addEventListener('click', async (e) => {
+                    if (e.target.closest('.btn-delete-lib-item')) return;
+                    
+                    try {
+                        const nextIdx = builderBlocks.length + 1;
+                        const res = await requestAPI(`/api/questionnaires/${activeBuilderQuestionnaireId}/blocks`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                block_type: lb.block_type,
+                                content: lb.content,
+                                order_index: nextIdx
+                            })
+                        });
+                        if (res.success) {
+                            builderBlocks.push(res.block);
+                            renderCanvasBlocks();
+                            selectCanvasBlock(res.block.id);
+                            showToast("Bloc personnalisé inséré !", "success");
+                        }
+                    } catch (err) {
+                        console.error("Erreur insertion bloc bibliothèque:", err);
+                    }
+                });
+                
+                div.querySelector('.btn-delete-lib-item').addEventListener('click', async () => {
+                    if (confirm("Supprimer ce modèle de bloc de votre bibliothèque ?")) {
+                        try {
+                            const res = await requestAPI(`/api/library/${lb.id}`, { method: 'DELETE' });
+                            if (res.success) {
+                                showToast("Bloc retiré de la bibliothèque.", "success");
+                                loadLibraryBlocks();
+                            }
+                        } catch (err) {
+                            console.error("Erreur suppression bibliothèque:", err);
+                        }
+                    }
+                });
+                
+                builderSavedBlocksContainer.appendChild(div);
+            });
+        } catch (err) {
+            console.error("Erreur chargement bibliothèque:", err);
+        }
+    }
+
+    const draggableItems = document.querySelectorAll('.builder-sidebar-left .draggable-block-item');
+    draggableItems.forEach(item => {
+        item.addEventListener('dragstart', (e) => {
+            const type = item.getAttribute('data-type');
+            const qtype = item.getAttribute('data-qtype');
+            e.dataTransfer.setData('text/plain', JSON.stringify({ source: 'library', type, qtype }));
+        });
+        
+        item.addEventListener('click', async () => {
+            if (!activeBuilderQuestionnaireId) return;
+            const type = item.getAttribute('data-type');
+            const qtype = item.getAttribute('data-qtype');
+            const content = getBlockDefaultContent(type, qtype);
+            const nextIdx = builderBlocks.length + 1;
+            
+            try {
+                const res = await requestAPI(`/api/questionnaires/${activeBuilderQuestionnaireId}/blocks`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        block_type: type,
+                        content: content,
+                        order_index: nextIdx
+                    })
+                });
+                if (res.success) {
+                    builderBlocks.push(res.block);
+                    renderCanvasBlocks();
+                    selectCanvasBlock(res.block.id);
+                    builderCanvas.scrollTop = builderCanvas.scrollHeight;
+                }
+            } catch (err) {
+                console.error("Erreur ajout bloc par clic:", err);
+            }
+        });
+    });
+    
+    builderCanvas.addEventListener('dragover', (e) => {
+        e.preventDefault();
+    });
+    
+    builderCanvas.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        if (e.target.closest('.builder-block')) return;
+        
+        const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+        if (data.source === 'library') {
+            const content = data.content || getBlockDefaultContent(data.type, data.qtype);
+            const nextIdx = builderBlocks.length + 1;
+            
+            try {
+                const res = await requestAPI(`/api/questionnaires/${activeBuilderQuestionnaireId}/blocks`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        block_type: data.type,
+                        content: content,
+                        order_index: nextIdx
+                    })
+                });
+                if (res.success) {
+                    builderBlocks.push(res.block);
+                    renderCanvasBlocks();
+                    selectCanvasBlock(res.block.id);
+                }
+            } catch (err) {
+                console.error("Erreur drop canvas vide:", err);
+            }
+        }
+    });
+
+    document.getElementById('btn-canvas-add-block-bottom').addEventListener('click', async () => {
+        if (!activeBuilderQuestionnaireId) return;
+        const nextIdx = builderBlocks.length + 1;
+        
+        try {
+            const res = await requestAPI(`/api/questionnaires/${activeBuilderQuestionnaireId}/blocks`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    block_type: 'question',
+                    content: getBlockDefaultContent('question', 'text'),
+                    order_index: nextIdx
+                })
+            });
+            if (res.success) {
+                builderBlocks.push(res.block);
+                renderCanvasBlocks();
+                selectCanvasBlock(res.block.id);
+            }
+        } catch (err) {
+            console.error("Erreur ajout bas du canvas:", err);
+        }
+    });
+
+    document.getElementById('btn-builder-save').addEventListener('click', () => {
+        showToast("Toutes les modifications sont synchronisées en temps réel !", "success");
+    });
+    
+    document.getElementById('btn-builder-preview').addEventListener('click', () => {
+        builderOverlay.style.display = 'none';
+        activeQuestionnaireId = activeBuilderQuestionnaireId;
+        selectQuestionnaire.value = activeQuestionnaireId;
+        renderQuestionsFields();
+        switchTab('collecte');
+    });
+
+    function getBlockDefaultContent(type, qtype) {
+        if (type === 'section') return { title: 'Nouvelle Section' };
+        if (type === 'text') return { text: 'Nouveau paragraphe descriptif...' };
+        if (type === 'question') {
+            if (qtype === 'select') {
+                return { label: 'Nouvelle Question à choix', question_type: 'select', choices: ['Option A', 'Option B'], is_required: false, help_text: '' };
+            }
+            return { label: 'Nouvelle Question textuelle', question_type: 'text', is_required: false, help_text: '' };
+        }
+        if (type === 'checkbox') return { label: 'Liste de contrôle', options: ['Tâche 1', 'Tâche 2'] };
+        if (type === 'matrix') return { label: 'Grille d\'évaluation', rows: ['Ligne 1'], columns: ['Colonne 1'] };
+        return { label: `Champ ${type.toUpperCase()}`, help_text: '' };
+    }
+    
+    function getBlockIcon(type) {
+        const icons = {
+            signature: '✍️',
+            gps: '📍',
+            photo: '📷',
+            file: '📁',
+            comment: '💬',
+            checkbox: '☑️',
+            matrix: '📊'
+        };
+        return icons[type] || '❓';
+    }
+
+    // --- ASSISTANT IA CRÉATION ---
+    const btnTriggerAiBuilder = document.getElementById('btn-trigger-ai-builder');
+    const modalAiAssistantQuest = document.getElementById('modal-ai-assistant-quest');
+    
+    btnTriggerAiBuilder.addEventListener('click', () => {
+        document.getElementById('ai-quest-prompt-input').value = '';
+        modalAiAssistantQuest.style.display = 'flex';
+    });
+    
+    document.getElementById('btn-close-ai-quest-modal').addEventListener('click', () => modalAiAssistantQuest.style.display = 'none');
+    document.getElementById('btn-cancel-ai-quest').addEventListener('click', () => modalAiAssistantQuest.style.display = 'none');
+    
+    document.getElementById('btn-submit-ai-quest').addEventListener('click', async () => {
+        const prompt = document.getElementById('ai-quest-prompt-input').value;
+        if (!prompt) return;
+        
+        const loader = document.getElementById('ai-quest-loader');
+        loader.style.display = 'block';
+        
+        try {
+            const res = await requestAPI('/api/assistant/create-questionnaire', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: prompt })
+            });
+            if (res.success) {
+                const confirmRes = await requestAPI('/api/questionnaires/import/confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        project_id: activeProjectId,
+                        structure: res.structure
+                    })
+                });
+                if (confirmRes.success) {
+                    modalAiAssistantQuest.style.display = 'none';
+                    showToast("Questionnaire généré par l'IA avec succès !", "success");
+                    loadQuestionnairesList();
+                    openVisualBuilder(confirmRes.questionnaire.id);
+                }
+            }
+        } catch (err) {
+            console.error("Erreur de génération IA:", err);
+        } finally {
+            loader.style.display = 'none';
+        }
+    });
+
+    // --- IMPORTS DE FICHIERS QUESTIONNAIRE (IA) ---
+    const btnTriggerImportBuilder = document.getElementById('btn-trigger-import-builder');
+    const modalImportQuestionnaire = document.getElementById('modal-import-questionnaire');
+    const importFileDropArea = document.getElementById('import-file-drop-area');
+    const importFileInput = document.getElementById('import-file-input');
+    const btnConfirmImportQuest = document.getElementById('btn-confirm-import-quest');
+    
+    let importedStructure = null;
+    
+    btnTriggerImportBuilder.addEventListener('click', () => {
+        importedStructure = null;
+        btnConfirmImportQuest.disabled = true;
+        document.getElementById('import-preview-results').style.display = 'none';
+        document.getElementById('import-file-label').innerHTML = 'Glissez-déposez votre document ici ou <span class="file-browse-btn">parcourez</span>';
+        modalImportQuestionnaire.style.display = 'flex';
+    });
+    
+    document.getElementById('btn-close-import-modal').addEventListener('click', () => modalImportQuestionnaire.style.display = 'none');
+    document.getElementById('btn-cancel-import-quest').addEventListener('click', () => modalImportQuestionnaire.style.display = 'none');
+    
+    importFileDropArea.addEventListener('click', () => importFileInput.click());
+    
+    importFileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) handleImportFile(e.target.files[0]);
+    });
+    
+    importFileDropArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        importFileDropArea.style.borderColor = 'var(--indigo)';
+    });
+    
+    importFileDropArea.addEventListener('dragleave', () => {
+        importFileDropArea.style.borderColor = 'rgba(255,255,255,0.1)';
+    });
+    
+    importFileDropArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        importFileDropArea.style.borderColor = 'rgba(255,255,255,0.1)';
+        if (e.dataTransfer.files.length > 0) handleImportFile(e.dataTransfer.files[0]);
+    });
+    
+    async function handleImportFile(file) {
+        document.getElementById('import-file-label').innerText = `Fichier sélectionné : ${file.name}`;
+        
+        const loader = document.getElementById('import-analysis-loader');
+        loader.style.display = 'block';
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        try {
+            const res = await requestAPI('/api/questionnaires/import', {
+                method: 'POST',
+                body: formData
+            });
+            if (res.success) {
+                importedStructure = res.structure;
+                
+                const previewBox = document.getElementById('import-preview-box-content');
+                previewBox.innerHTML = `
+                    <strong>${importedStructure.title}</strong><br>
+                    <small>${importedStructure.description || 'Pas de description'}</small>
+                    <ul class="mt-2 pl-3" style="text-align: left;">
+                        ${(importedStructure.blocks || []).map(b => `<li>${b.block_type.toUpperCase()} : ${b.content.label || b.content.title || 'Champ'}</li>`).join('')}
+                    </ul>
+                `;
+                document.getElementById('import-preview-results').style.display = 'block';
+                btnConfirmImportQuest.disabled = false;
+                showToast("Fichier analysé avec succès par l'IA !", "success");
+            }
+        } catch (err) {
+            console.error("Erreur lors de l'import:", err);
+        } finally {
+            loader.style.display = 'none';
+        }
+    }
+    
+    btnConfirmImportQuest.addEventListener('click', async () => {
+        if (!importedStructure) return;
+        
+        try {
+            const res = await requestAPI('/api/questionnaires/import/confirm', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    project_id: activeProjectId,
+                    structure: importedStructure
+                })
+            });
+            if (res.success) {
+                modalImportQuestionnaire.style.display = 'none';
+                showToast("Questionnaire importé avec succès !", "success");
+                loadQuestionnairesList();
+                openVisualBuilder(res.questionnaire.id);
+            }
+        } catch (err) {
+            console.error("Erreur de confirmation de l'import:", err);
+        }
+    });
+
+    // --- LIENS EXPORT DANS LE BUILDER ---
+    document.getElementById('export-word-link').addEventListener('click', (e) => {
+        e.preventDefault();
+        window.open(`/api/questionnaires/${activeBuilderQuestionnaireId}/export/word`, '_blank');
+    });
+    
+    document.getElementById('export-excel-link').addEventListener('click', (e) => {
+        e.preventDefault();
+        window.open(`/api/questionnaires/${activeBuilderQuestionnaireId}/export/excel`, '_blank');
+    });
+    
+    document.getElementById('export-pdf-link').addEventListener('click', (e) => {
+        e.preventDefault();
+        window.open(`/api/questionnaires/${activeBuilderQuestionnaireId}/export/pdf`, '_blank');
+    });
+    
+    document.getElementById('export-mobile-link').addEventListener('click', (e) => {
+        e.preventDefault();
+        window.open(`/api/questionnaires/${activeBuilderQuestionnaireId}/export/mobile`, '_blank');
     });
 
     // --- 8. ANGLAIS ANALYSE TRIANGULATION & MATRICE ---

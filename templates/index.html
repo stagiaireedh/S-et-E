@@ -369,6 +369,9 @@
                             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
                             Partager ce Questionnaire
                         </button>
+                        <button id="btn-edit-active-questionnaire" class="btn-primary btn-block" style="margin-bottom: 12px; display: none;">
+                            ✏️ Éditer ce Questionnaire
+                        </button>
                         <div class="divider">ou</div>
                         <button id="btn-create-questionnaire" class="btn-secondary btn-block">
                             Créer un nouveau Questionnaire
@@ -568,38 +571,239 @@
         </div>
     </div>
 
-    <!-- MODAL: AJOUTER UN NOUVEAU QUESTIONNAIRE -->
-    <div class="modal-overlay" id="modal-questionnaire">
-        <div class="modal-card modal-lg">
+    <!-- MODAL: AJOUTER UN NOUVEAU QUESTIONNAIRE ET CHOISIR UN MODELE -->
+    <div class="modal-overlay" id="modal-create-questionnaire-select" style="display: none;">
+        <div class="modal-card">
             <div class="modal-header">
                 <h2>Créer un Questionnaire</h2>
-                <button class="modal-close" id="btn-close-quest-modal">&times;</button>
+                <button class="modal-close" id="btn-close-select-template-modal">&times;</button>
             </div>
-            <form id="form-new-questionnaire">
+            <form id="form-select-template-create">
                 <div class="form-group">
-                    <label for="new-quest-title">Titre du Questionnaire *</label>
-                    <input type="text" id="new-quest-title" placeholder="Ex: Évaluation Finale - Infrastructures" required>
+                    <label for="select-template-title">Nom du questionnaire *</label>
+                    <input type="text" id="select-template-title" placeholder="Ex: Évaluation finale - Forages" required>
                 </div>
                 <div class="form-group">
-                    <label for="new-quest-desc">Description / Objectif du questionnaire</label>
-                    <textarea id="new-quest-desc" rows="2" placeholder="Ex: Mesurer l'appropriation locale et la durabilité"></textarea>
+                    <label>Choisir un modèle de départ :</label>
+                    <div class="template-selection-grid">
+                        <label class="template-option active">
+                            <input type="radio" name="template_cat" value="vide" checked>
+                            <span>⬜ Vide</span>
+                        </label>
+                        <label class="template-option">
+                            <input type="radio" name="template_cat" value="mission">
+                            <span>📋 Mission terrain</span>
+                        </label>
+                        <label class="template-option">
+                            <input type="radio" name="template_cat" value="evaluation">
+                            <span>📊 Évaluation</span>
+                        </label>
+                        <label class="template-option">
+                            <input type="radio" name="template_cat" value="satisfaction">
+                            <span>😊 Satisfaction</span>
+                        </label>
+                        <label class="template-option">
+                            <input type="radio" name="template_cat" value="focus_group">
+                            <span>👥 Focus Group</span>
+                        </label>
+                    </div>
                 </div>
-                
-                <div class="divider">QUESTIONS</div>
-                
-                <div id="modal-questions-list">
-                    <!-- Ligne de question dynamique -->
-                </div>
-                
-                <button type="button" id="btn-add-question-row" class="btn-secondary btn-sm" style="margin-top:10px;">
-                    + Ajouter une Question
-                </button>
-                
-                <div class="form-actions" style="margin-top:20px;">
-                    <button type="button" class="btn-secondary" id="btn-cancel-quest-modal">Annuler</button>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="btn-cancel-select-template">Annuler</button>
                     <button type="submit" class="btn-primary">Créer le Questionnaire</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- BUILDER OVERLAY: CONSTRUCTEUR VISUEL PAR BLOCS (CANVA/NOTION STYLE) -->
+    <div id="builder-overlay" class="builder-overlay" style="display: none;">
+        <!-- Header Topbar -->
+        <div class="builder-topbar">
+            <div class="builder-topbar-left">
+                <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="24" height="24">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                </svg>
+                <div>
+                    <h3 id="builder-project-name">Projet Actif</h3>
+                    <span id="builder-questionnaire-title">Nom du questionnaire</span>
+                </div>
+            </div>
+            <div class="builder-topbar-actions">
+                <button id="btn-builder-save" class="btn-primary">
+                    💾 Enregistrer
+                </button>
+                <button id="btn-builder-preview" class="btn-secondary">
+                    👁️ Aperçu
+                </button>
+                <div class="dropdown-export-wrapper">
+                    <button id="btn-builder-export" class="btn-secondary">
+                        📥 Exporter
+                    </button>
+                    <div class="export-dropdown-content" id="export-dropdown-menu">
+                        <a href="#" id="export-word-link">📄 Word (.docx)</a>
+                        <a href="#" id="export-excel-link">📊 Excel (.xlsx)</a>
+                        <a href="#" id="export-pdf-link">📕 PDF (.pdf)</a>
+                        <a href="#" id="export-mobile-link">📱 Format Mobile (JSON)</a>
+                    </div>
+                </div>
+                <button id="btn-builder-close" class="btn-secondary btn-close-builder">
+                    ❌ Fermer
+                </button>
+            </div>
+        </div>
+        
+        <!-- Workspace 3-columns -->
+        <div class="builder-workspace">
+            <!-- Left Column: Bibliothèque -->
+            <div class="builder-sidebar-left">
+                <h4>BIBLIOTHÈQUE</h4>
+                <p class="section-subtitle">Glissez ou cliquez sur un bloc pour l'ajouter</p>
+                
+                <div class="quick-ai-actions">
+                    <button id="btn-trigger-ai-builder" class="btn-ai w-100" style="margin-bottom: 8px;">
+                        🤖 Générer par IA
+                    </button>
+                    <button id="btn-trigger-import-builder" class="btn-secondary w-100" style="margin-bottom: 12px;">
+                        📁 Importer un document
+                    </button>
+                </div>
+
+                <div class="library-blocks-list">
+                    <div class="block-category-title">STRUCTURE</div>
+                    <div class="draggable-block-item" data-type="section" draggable="true">
+                        <span>📑 Section</span>
+                    </div>
+                    <div class="draggable-block-item" data-type="text" draggable="true">
+                        <span>📄 Texte explicatif</span>
+                    </div>
+                    
+                    <div class="block-category-title">QUESTIONS</div>
+                    <div class="draggable-block-item" data-type="question" data-qtype="text" draggable="true">
+                        <span>❓ Question (Texte libre)</span>
+                    </div>
+                    <div class="draggable-block-item" data-type="question" data-qtype="select" draggable="true">
+                        <span>📋 Question (Choix unique)</span>
+                    </div>
+                    <div class="draggable-block-item" data-type="matrix" draggable="true">
+                        <span>📊 Matrice de questions</span>
+                    </div>
+                    <div class="draggable-block-item" data-type="checkbox" draggable="true">
+                        <span>✅ Checklist</span>
+                    </div>
+                    
+                    <div class="block-category-title">CHAMPS TERRAIN</div>
+                    <div class="draggable-block-item" data-type="gps" draggable="true">
+                        <span>📍 Localisation GPS</span>
+                    </div>
+                    <div class="draggable-block-item" data-type="photo" draggable="true">
+                        <span>📷 Capture Photo</span>
+                    </div>
+                    <div class="draggable-block-item" data-type="signature" draggable="true">
+                        <span>✍️ Signature</span>
+                    </div>
+                    <div class="draggable-block-item" data-type="file" draggable="true">
+                        <span>📁 Fichier joint</span>
+                    </div>
+                    <div class="draggable-block-item" data-type="comment" draggable="true">
+                        <span>💬 Commentaire libre</span>
+                    </div>
+                </div>
+                
+                <div class="block-category-title">MA BIBLIOTHÈQUE</div>
+                <div id="builder-saved-blocks-container" class="library-saved-blocks">
+                    <p class="text-muted text-center py-2" style="font-size: 11px;">Aucun bloc personnalisé.</p>
+                </div>
+            </div>
+            
+            <!-- Center Column: Canvas -->
+            <div class="builder-canvas-wrapper">
+                <div class="canvas-header-indicator">
+                    <span id="canvas-blocks-count">0 blocs</span>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar-fill" id="canvas-progress-fill" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <div class="builder-canvas" id="builder-canvas-area">
+                    <div class="canvas-empty-state" id="canvas-empty-state-msg">
+                        <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="12" y1="8" x2="12" y2="16"/>
+                            <line x1="8" y1="12" x2="16" y2="12"/>
+                        </svg>
+                        <p>Glissez-déposez des blocs depuis la bibliothèque de gauche pour concevoir votre questionnaire.</p>
+                    </div>
+                </div>
+                <div class="canvas-footer-actions">
+                    <button id="btn-canvas-add-block-bottom" class="btn-secondary">
+                        ＋ Ajouter un bloc
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Right Column: Propriétés -->
+            <div class="builder-sidebar-right">
+                <h4>PROPRIÉTÉS DU BLOC</h4>
+                <div id="properties-panel-content">
+                    <p class="text-muted text-center py-5">Sélectionnez un bloc sur le canvas pour modifier ses propriétés.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: IMPORTER QUESTIONNAIRE (IA) -->
+    <div class="modal-overlay" id="modal-import-questionnaire" style="display: none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2>Importer un Questionnaire</h2>
+                <button class="modal-close" id="btn-close-import-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted" style="font-size: 13px; margin-bottom: 12px;">Importez un fichier Word (.docx), PDF (.pdf) ou Excel (.xlsx) pour en extraire automatiquement la structure par IA.</p>
+                <div class="file-drop-zone" id="import-file-drop-area">
+                    <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                    </svg>
+                    <p id="import-file-label">Glissez-déposez votre document ici ou <span class="file-browse-btn">parcourez</span></p>
+                    <input type="file" id="import-file-input" style="display:none;" accept=".docx,.pdf,.xlsx,.xls">
+                </div>
+                <div id="import-analysis-loader" style="display: none; text-align: center; padding: 20px;">
+                    <div class="spinner-small" style="margin: 0 auto 10px;"></div>
+                    <p class="text-muted" style="font-size: 13px;">Analyse IA du document en cours...</p>
+                </div>
+                <div id="import-preview-results" style="display: none; margin-top: 15px;">
+                    <h4 style="margin-bottom: 6px;">Structure détectée par l'IA :</h4>
+                    <div class="import-preview-box" id="import-preview-box-content" style="max-height: 150px; overflow-y: auto; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; font-size: 12px; border: 1px solid var(--border-color);"></div>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 15px;">
+                <button type="button" class="btn-secondary" id="btn-cancel-import-quest">Annuler</button>
+                <button type="button" class="btn-primary" id="btn-confirm-import-quest" disabled>Confirmer & Créer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: ASSISTANT IA QUESTIONNAIRE -->
+    <div class="modal-overlay" id="modal-ai-assistant-quest" style="display: none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2>Assistant IA de Création</h2>
+                <button class="modal-close" id="btn-close-ai-quest-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted" style="font-size: 13px; margin-bottom: 12px;">Décrivez le questionnaire que vous souhaitez créer. L'assistant IA concevra une structure par blocs adaptée.</p>
+                <div class="form-group">
+                    <textarea id="ai-quest-prompt-input" rows="4" placeholder="Ex: Créer un questionnaire d'évaluation de projet de forage d'eau avec 3 sections : identification, maintenance technique et aspect financier. Inclure des signatures et coordonnées GPS." required></textarea>
+                </div>
+                <div id="ai-quest-loader" style="display: none; text-align: center; padding: 15px;">
+                    <div class="spinner-small" style="margin: 0 auto 10px;"></div>
+                    <p class="text-muted" style="font-size: 13px;">Génération du questionnaire en cours...</p>
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 15px;">
+                <button type="button" class="btn-secondary" id="btn-cancel-ai-quest">Annuler</button>
+                <button type="button" class="btn-primary" id="btn-submit-ai-quest">Générer</button>
+            </div>
         </div>
     </div>
 
