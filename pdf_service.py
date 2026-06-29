@@ -3,6 +3,28 @@ from fpdf import FPDF
 from datetime import datetime
 from ai_service import run_project_triangulation
 
+def clean_unicode(text):
+    """Remplace les caractères Unicode non supportés par la police Helvetica standard."""
+    if not text:
+        return ""
+    replacements = {
+        '\u2014': '-',      # Em-dash
+        '\u2013': '-',      # En-dash
+        '\u2019': "'",      # Apostrophe courbe
+        '\u2018': "'",      # Apostrophe courbe gauche
+        '\u201c': '"',      # Guillemet courbe gauche
+        '\u201d': '"',      # Guillemet courbe droite
+        '\u2026': '...',    # Points de suspension
+        '\xa0': ' ',        # Espace insécable
+        '\u202f': ' ',      # Espace insécable fin
+        'œ': 'oe',          # Ligature oe
+        'Œ': 'OE',          # Ligature OE
+    }
+    for k, v in replacements.items():
+        text = str(text).replace(k, v)
+    # Remplacement des caractères restants hors de latin-1 par un point d'interrogation
+    return text.encode('latin-1', 'replace').decode('latin-1')
+
 class EvaluatorPDF(FPDF):
     """Classe FPDF personnalisée pour générer des rapports professionnels."""
     
@@ -12,6 +34,15 @@ class EvaluatorPDF(FPDF):
         self.project_name = project_name
         self.set_margins(15, 20, 15)
         self.set_auto_page_break(auto=True, margin=20)
+
+    def cell(self, w, h=0, txt="", *args, **kwargs):
+        txt = clean_unicode(txt)
+        return super().cell(w, h, txt, *args, **kwargs)
+
+    def multi_cell(self, w, h=0, txt="", *args, **kwargs):
+        txt = clean_unicode(txt)
+        return super().multi_cell(w, h, txt, *args, **kwargs)
+
         
     def header(self):
         # Dessiner une barre d'accentuation en haut
