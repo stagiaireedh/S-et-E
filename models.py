@@ -37,9 +37,8 @@ class Project(db.Model):
     description = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    # Propriétaire & Démo
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    is_demo = db.Column(db.Boolean, default=False)
+    # Propriétaire
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     
     # Relations
     questionnaires = db.relationship('Questionnaire', backref='project', lazy=True, cascade="all, delete-orphan")
@@ -52,8 +51,7 @@ class Project(db.Model):
             'name': self.name,
             'description': self.description,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'user_id': self.user_id,
-            'is_demo': self.is_demo
+            'user_id': self.user_id
         }
 
 
@@ -70,6 +68,7 @@ class Questionnaire(db.Model):
     # Relations
     questions = db.relationship('Question', backref='questionnaire', lazy=True, order_by="Question.order_num", cascade="all, delete-orphan")
     sessions = db.relationship('InterviewSession', backref='questionnaire', lazy=True)
+    shares = db.relationship('SharedQuestionnaire', lazy=True, cascade="all, delete-orphan")
 
     def to_dict(self):
         return {

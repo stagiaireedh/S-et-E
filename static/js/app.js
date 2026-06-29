@@ -235,9 +235,8 @@ document.addEventListener('DOMContentLoaded', () => {
             projectSelect.innerHTML = '';
             if (projects.length === 0) {
                 projectSelect.innerHTML = '<option value="" disabled selected>Créer un projet d\'abord</option>';
-                projectTitle.innerText = "Aucun projet";
-                projectDesc.innerText = "Veuillez créer un projet pour commencer.";
                 activeProjectId = null;
+                updateActiveProjectDetails();
                 return;
             }
             
@@ -271,26 +270,23 @@ document.addEventListener('DOMContentLoaded', () => {
             projectDesc.innerText = proj.description || "Aucune description.";
             localStorage.setItem('activeProjectId', activeProjectId);
 
-            // Cacher ou afficher les boutons selon le flag is_demo
-            const badgeDemo = document.getElementById('demo-badge');
             const btnDeleteProject = document.getElementById('btn-delete-project');
             const btnCreateQuestionnaire = document.getElementById('btn-create-questionnaire');
             
-            if (proj.is_demo) {
-                if (badgeDemo) badgeDemo.style.display = 'inline-block';
-                if (btnDeleteProject) btnDeleteProject.style.display = 'none';
-                if (btnCreateQuestionnaire) {
-                    btnCreateQuestionnaire.disabled = true;
-                    btnCreateQuestionnaire.title = "Le projet de démonstration est en lecture seule.";
-                }
-            } else {
-                if (badgeDemo) badgeDemo.style.display = 'none';
-                if (btnDeleteProject) btnDeleteProject.style.display = 'inline-flex';
-                if (btnCreateQuestionnaire) {
-                    btnCreateQuestionnaire.disabled = false;
-                    btnCreateQuestionnaire.title = "";
-                }
+            if (btnDeleteProject) btnDeleteProject.style.display = 'inline-flex';
+            if (btnCreateQuestionnaire) {
+                btnCreateQuestionnaire.disabled = false;
+                btnCreateQuestionnaire.title = "";
             }
+        } else {
+            projectTitle.innerText = "Aucun projet";
+            projectDesc.innerText = "Aucun projet, créez-en un.";
+            localStorage.removeItem('activeProjectId');
+            
+            const btnDeleteProject = document.getElementById('btn-delete-project');
+            const btnCreateQuestionnaire = document.getElementById('btn-create-questionnaire');
+            if (btnDeleteProject) btnDeleteProject.style.display = 'none';
+            if (btnCreateQuestionnaire) btnCreateQuestionnaire.disabled = true;
         }
     }
     
@@ -309,11 +305,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const proj = projects.find(p => p.id === activeProjectId);
         if (!proj) return;
         
-        if (proj.is_demo) {
-            showToast("Le projet de démonstration ne peut pas être supprimé.", "warning");
-            return;
-        }
-
         openConfirmModal(
             proj.name,
             "Êtes-vous sûr de vouloir supprimer ce projet ? Cette action supprimera définitivement le projet, tous les questionnaires, tous les entretiens et toutes les réponses de triangulation associés.",
@@ -375,7 +366,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 4. TABLEAU DE BORD (DASHBOARD) ---
     async function loadDashboardData() {
-        if (!activeProjectId) return;
+        if (!activeProjectId) {
+            document.getElementById('kpi-total-sessions').innerText = "0";
+            document.getElementById('kpi-total-questionnaires').innerText = "0";
+            document.getElementById('kpi-total-attachments').innerText = "0";
+            document.getElementById('kpi-sentiment-avg').innerText = "-";
+            document.querySelector('#table-recent-sessions tbody').innerHTML = '<tr><td colspan="6" class="text-center text-muted">Veuillez d\'abord créer un projet.</td></tr>';
+            renderAttachments([]);
+            renderDashboardCharts([]);
+            return;
+        }
         
         try {
             const sessions = await requestAPI(`/api/projects/${activeProjectId}/sessions`);
@@ -406,9 +406,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (sessions.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Aucun entretien enregistré.</td></tr>';
             } else {
-                const activeProj = projects.find(p => p.id === activeProjectId);
-                const isDemo = activeProj && activeProj.is_demo;
-
                 sessions.slice(0, 5).forEach(s => {
                     const tr = document.createElement('tr');
                     
@@ -447,14 +444,12 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <button class="btn-link btn-download-session-pdf" data-id="${s.id}" title="Télécharger Fiche PDF">
                                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                                 </button>
-                                ${isDemo ? '' : `
                                 <button class="btn-link btn-edit-session" data-id="${s.id}" title="Modifier l'Entretien">
                                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                 </button>
                                 <button class="btn-link btn-delete-session" data-id="${s.id}" data-name="${s.title}" title="Supprimer l'Entretien">
                                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                                 </button>
-                                `}
                             </div>
                         </td>
                     `;
@@ -601,9 +596,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const fileInput = document.getElementById('file-upload-input');
     
     dropZone.addEventListener('click', () => {
-        const activeProj = projects.find(p => p.id === activeProjectId);
-        if (activeProj && activeProj.is_demo) {
-            showToast("Le projet de démonstration est en lecture seule.", "warning");
+        if (!activeProjectId) {
+            showToast("Veuillez d'abord sélectionner ou créer un projet.", "warning");
             return;
         }
         fileInput.click();
@@ -611,8 +605,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
-        const activeProj = projects.find(p => p.id === activeProjectId);
-        if (activeProj && activeProj.is_demo) return;
+        if (!activeProjectId) return;
         dropZone.classList.add('dragover');
     });
     
@@ -623,9 +616,8 @@ document.addEventListener('DOMContentLoaded', () => {
     dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
         dropZone.classList.remove('dragover');
-        const activeProj = projects.find(p => p.id === activeProjectId);
-        if (activeProj && activeProj.is_demo) {
-            showToast("Le projet de démonstration est en lecture seule.", "warning");
+        if (!activeProjectId) {
+            showToast("Veuillez d'abord sélectionner ou créer un projet.", "warning");
             return;
         }
         const files = e.dataTransfer.files;
@@ -643,11 +635,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     async function uploadFiles(files) {
         if (!activeProjectId) return;
-        const activeProj = projects.find(p => p.id === activeProjectId);
-        if (activeProj && activeProj.is_demo) {
-            showToast("Le projet de démonstration est en lecture seule.", "warning");
-            return;
-        }
         
         let successCount = 0;
         for (let i = 0; i < files.length; i++) {
@@ -706,7 +693,12 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Charger questionnaires
     async function loadQuestionnairesList() {
-        if (!activeProjectId) return;
+        if (!activeProjectId) {
+            selectQuestionnaire.innerHTML = '<option value="" disabled selected>Créer un projet d\'abord...</option>';
+            const btnShare = document.getElementById('btn-share-questionnaire');
+            if (btnShare) btnShare.style.display = 'none';
+            return;
+        }
         
         try {
             questionnaires = await requestAPI(`/api/projects/${activeProjectId}/questionnaires`);
@@ -735,8 +727,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Afficher/masquer le bouton de partage de questionnaire
         const btnShare = document.getElementById('btn-share-questionnaire');
-        const proj = projects.find(p => p.id === activeProjectId);
-        if (activeQuestionnaireId && proj && !proj.is_demo) {
+        if (activeQuestionnaireId) {
             btnShare.style.display = 'block';
         } else {
             btnShare.style.display = 'none';
@@ -852,11 +843,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const questionsListDiv = document.getElementById('modal-questions-list');
     
     btnCreateQuestionnaire.addEventListener('click', () => {
-        const activeProj = projects.find(p => p.id === activeProjectId);
-        if (activeProj && activeProj.is_demo) {
-            showToast("Le projet de démonstration est en lecture seule.", "warning");
-            return;
-        }
+        if (!activeProjectId) return;
         modalQuestionnaire.classList.add('active');
         questionsListDiv.innerHTML = '';
         addQuestionRow();
@@ -948,7 +935,17 @@ document.addEventListener('DOMContentLoaded', () => {
     let analysisDataGlobal = null;
     
     async function loadTriangulationData() {
-        if (!activeProjectId) return;
+        if (!activeProjectId) {
+            document.getElementById('ai-gauge-sentiment-label').innerText = "-";
+            document.getElementById('ai-gauge-sentiment-label').style.borderColor = "var(--border-color)";
+            document.getElementById('ai-gauge-sentiment-label').style.boxShadow = "none";
+            document.getElementById('ai-metric-score-value').innerText = "Veuillez d'abord créer un projet.";
+            document.getElementById('ai-themes-list').innerHTML = "<p class='text-muted'>Aucune donnée.</p>";
+            document.getElementById('ai-recommendations-list').innerHTML = "<p class='text-muted'>Aucune recommandation.</p>";
+            selectCompareQuestion.innerHTML = '<option value="" disabled selected>Aucun projet...</option>';
+            matrixContainer.innerHTML = '<div class="text-center text-muted py-5"><p>Veuillez d\'abord créer un projet.</p></div>';
+            return;
+        }
         
         try {
             const data = await requestAPI(`/api/projects/${activeProjectId}/triangulation`);

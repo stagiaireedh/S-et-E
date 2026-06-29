@@ -44,79 +44,14 @@ def create_app():
     def unauthorized():
         return jsonify({'success': False, 'message': 'Authentification requise.'}), 401
 
-    # Auto-création des tables et chargement des données de démonstration (seeding)
+    # Auto-création des tables (le projet démo a été supprimé)
     with app.app_context():
         try:
             db.create_all()
-            if Project.query.filter_by(is_demo=True).count() == 0:
-                from datetime import date
-                project = Project(
-                    name="Projet d'Accès à l'Eau Potable et Assainissement (AEPA)",
-                    description=(
-                        "Ce projet vise à améliorer durablement l'accès à l'eau potable et aux infrastructures d'assainissement "
-                        "de base pour 15 000 personnes vivant dans les zones rurales de la commune de Gandon. Il s'appuie sur la "
-                        "construction de 5 forages solaires, l'installation de bornes-fontaines et le renforcement des capacités des "
-                        "comités locaux de gestion de l'eau (ASUFOR)."
-                    ),
-                    is_demo=True
-                )
-                db.session.add(project)
-                db.session.flush()
-                
-                questionnaire = Questionnaire(
-                    project_id=project.id,
-                    title="Évaluation Intermédiaire - Projet AEPA",
-                    description="Questionnaire destiné à évaluer l'accès, le fonctionnement, la gestion financière et la satisfaction après 12 mois de mise en œuvre."
-                )
-                db.session.add(questionnaire)
-                db.session.flush()
-                
-                q1 = Question(questionnaire_id=questionnaire.id, text="Quelle est votre appréciation globale de la disponibilité et de la qualité de l'eau potable ?", question_type="select", choices="Excellent, Bon, Moyen, Mauvais", order_num=1)
-                q2 = Question(questionnaire_id=questionnaire.id, text="Quels sont les principaux changements constatés dans votre vie quotidienne (santé, temps de trajet, économies) ?", question_type="text", order_num=2)
-                q3 = Question(questionnaire_id=questionnaire.id, text="Avez-vous rencontré des difficultés techniques ou des pannes récurrentes avec les nouvelles installations ?", question_type="text", order_num=3)
-                q4 = Question(questionnaire_id=questionnaire.id, text="Selon vous, le comité de gestion local gère-t-il les cotisations et les installations de manière transparente ?", question_type="select", choices="Oui tout à fait, Oui partiellement, Non pas du tout", order_num=4)
-                q5 = Question(questionnaire_id=questionnaire.id, text="Quelles sont vos recommandations prioritaires pour garantir la durabilité du service d'eau ?", question_type="text", order_num=5)
-                db.session.add_all([q1, q2, q3, q4, q5])
-                db.session.flush()
-                
-                s1 = InterviewSession(
-                    project_id=project.id, questionnaire_id=questionnaire.id,
-                    title="Focus Group - Femmes du quartier Nord", interviewer="Sophie Diouf (Évaluatrice)",
-                    interviewee_name_or_group="Groupe de discussion (12 femmes)", actor_category="Bénéficiaire",
-                    session_type="collectif", interview_date=date(2026, 6, 10)
-                )
-                db.session.add(s1)
-                db.session.flush()
-                db.session.add_all([
-                    Answer(session_id=s1.id, question_id=q1.id, answer_text="Moyen"),
-                    Answer(session_id=s1.id, question_id=q2.id, answer_text="La qualité de l'eau est très bonne et les enfants ne tombent plus malades de la diarrhée. C'est un grand changement positif pour la santé de nos familles."),
-                    Answer(session_id=s1.id, question_id=q3.id, answer_text="Oui, nous rencontrons des pannes récurrentes de la pompe solaire ces derniers temps. Quand elle tombe en panne, le réparateur prend plus d'une semaine pour venir car il manque de pièces de rechange."),
-                    Answer(session_id=s1.id, question_id=q4.id, answer_text="Oui partiellement"),
-                    Answer(session_id=s1.id, question_id=q5.id, answer_text="Il faut absolument former un technicien local résidant dans le village et lui donner une caisse d'outils.")
-                ])
-                
-                s2 = InterviewSession(
-                    project_id=project.id, questionnaire_id=questionnaire.id,
-                    title="Entretien individuel - M. Amadou Diallo (Maraîcher)", interviewer="Sophie Diouf (Évaluatrice)",
-                    interviewee_name_or_group="Amadou Diallo", actor_category="Bénéficiaire",
-                    session_type="individuel", interview_date=date(2026, 6, 12)
-                )
-                db.session.add(s2)
-                db.session.flush()
-                db.session.add_all([
-                    Answer(session_id=s2.id, question_id=q1.id, answer_text="Excellent"),
-                    Answer(session_id=s2.id, question_id=q2.id, answer_text="Grâce à la borne-fontaine installée près de mes parcelles, j'ai pu augmenter ma production de salades et de tomates. Mes revenus ont augmenté de 30%."),
-                    Answer(session_id=s2.id, question_id=q3.id, answer_text="Pas de panne majeure de mon côté, mais la pression de l'eau baisse beaucoup en fin d'après-midi."),
-                    Answer(session_id=s2.id, question_id=q4.id, answer_text="Oui tout à fait"),
-                    Answer(session_id=s2.id, question_id=q5.id, answer_text="Il faudrait ajouter un deuxième réservoir de stockage d'eau.")
-                ])
-                db.session.commit()
-                app.logger.info("Base de données initialisée et projet démo ensemencé.")
+            app.logger.info("Base de données initialisée avec succès.")
         except Exception as e:
-            db.session.rollback()
             app.logger.error(f"Erreur d'initialisation automatique de la base : {e}")
 
-        
     # --- ROUTES FRONTEND ---
     @app.route('/')
     def index():
@@ -186,10 +121,8 @@ def create_app():
     @app.route('/api/projects', methods=['GET'])
     @login_required
     def get_projects():
-        """Récupère la liste de tous les projets de l'utilisateur + démo."""
-        projects = Project.query.filter(
-            (Project.user_id == current_user.id) | (Project.is_demo == True)
-        ).order_by(Project.created_at.desc()).all()
+        """Récupère la liste de tous les projets de l'utilisateur."""
+        projects = Project.query.filter_by(user_id=current_user.id).order_by(Project.created_at.desc()).all()
         return jsonify([p.to_dict() for p in projects])
 
     @app.route('/api/projects', methods=['POST'])
@@ -203,8 +136,7 @@ def create_app():
         project = Project(
             name=data['name'],
             description=data.get('description', ''),
-            user_id=current_user.id,
-            is_demo=False
+            user_id=current_user.id
         )
         db.session.add(project)
         db.session.commit()
@@ -216,8 +148,6 @@ def create_app():
         """Supprime un projet en cascade (base de données et pièces jointes sur le disque)."""
         project = Project.query.get_or_404(project_id)
         
-        if project.is_demo:
-            return jsonify({'success': False, 'message': 'Le projet de démonstration ne peut pas être supprimé.'}), 403
         if project.user_id != current_user.id:
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
             
@@ -239,7 +169,7 @@ def create_app():
     def get_project_questionnaires(project_id):
         """Récupère les questionnaires du projet ou ceux partagés avec l'utilisateur."""
         project = Project.query.get_or_404(project_id)
-        has_project_access = (project.is_demo or project.user_id == current_user.id)
+        has_project_access = (project.user_id == current_user.id)
         
         if has_project_access:
             questionnaires = Questionnaire.query.filter_by(project_id=project_id).all()
@@ -259,8 +189,6 @@ def create_app():
     def create_questionnaire(project_id):
         """Crée un questionnaire pour un projet."""
         project = Project.query.get_or_404(project_id)
-        if project.is_demo:
-            return jsonify({'success': False, 'message': 'Le projet de démonstration est en lecture seule.'}), 403
         if project.user_id != current_user.id:
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
             
@@ -296,7 +224,7 @@ def create_app():
         """Récupère les détails complets d'un questionnaire."""
         questionnaire = Questionnaire.query.get_or_404(questionnaire_id)
         # Vérification d'accès
-        is_owner = (questionnaire.project.user_id == current_user.id or questionnaire.project.is_demo)
+        is_owner = (questionnaire.project.user_id == current_user.id)
         is_shared = SharedQuestionnaire.query.filter_by(questionnaire_id=questionnaire_id, shared_with_user_id=current_user.id).first() is not None
         if not (is_owner or is_shared):
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
@@ -308,8 +236,6 @@ def create_app():
     def update_question(question_id):
         """Met à jour une question existante."""
         question = Question.query.get_or_404(question_id)
-        if question.questionnaire.project.is_demo:
-            return jsonify({'success': False, 'message': 'Le projet de démonstration est en lecture seule.'}), 403
             
         # Droits : propriétaire du projet ou partagé avec permission "edit"
         is_owner = (question.questionnaire.project.user_id == current_user.id)
@@ -335,8 +261,6 @@ def create_app():
     def delete_question(question_id):
         """Supprime une question spécifique."""
         question = Question.query.get_or_404(question_id)
-        if question.questionnaire.project.is_demo:
-            return jsonify({'success': False, 'message': 'Le projet de démonstration est en lecture seule.'}), 403
             
         is_owner = (question.questionnaire.project.user_id == current_user.id)
         share = SharedQuestionnaire.query.filter_by(questionnaire_id=question.questionnaire_id, shared_with_user_id=current_user.id).first()
@@ -420,7 +344,7 @@ def create_app():
     def get_project_sessions(project_id):
         """Récupère toutes les sessions d'un projet."""
         project = Project.query.get_or_404(project_id)
-        if not project.is_demo and project.user_id != current_user.id:
+        if project.user_id != current_user.id:
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
             
         sessions = InterviewSession.query.filter_by(project_id=project_id).order_by(InterviewSession.interview_date.desc()).all()
@@ -431,8 +355,6 @@ def create_app():
     def create_interview_session(project_id):
         """Enregistre un nouvel entretien."""
         project = Project.query.get_or_404(project_id)
-        if project.is_demo:
-            return jsonify({'success': False, 'message': 'Le projet de démonstration est en lecture seule.'}), 403
             
         is_owner = (project.user_id == current_user.id)
         data = request.get_json()
@@ -481,7 +403,7 @@ def create_app():
         """Récupère les détails d'une session."""
         session = InterviewSession.query.get_or_404(session_id)
         # Vérifier droits d'accès
-        is_owner = (session.project.user_id == current_user.id or session.project.is_demo)
+        is_owner = (session.project.user_id == current_user.id)
         is_shared = SharedQuestionnaire.query.filter_by(questionnaire_id=session.questionnaire_id, shared_with_user_id=current_user.id).first() is not None
         if not (is_owner or is_shared):
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
@@ -493,8 +415,6 @@ def create_app():
     def update_interview_session(session_id):
         """Met à jour un entretien existant."""
         session = InterviewSession.query.get_or_404(session_id)
-        if session.project.is_demo:
-            return jsonify({'success': False, 'message': 'Le projet de démonstration est en lecture seule.'}), 403
             
         is_owner = (session.project.user_id == current_user.id)
         is_author = (session.user_id == current_user.id)
@@ -535,8 +455,6 @@ def create_app():
     def delete_interview_session(session_id):
         """Supprime un entretien en cascade."""
         session = InterviewSession.query.get_or_404(session_id)
-        if session.project.is_demo:
-            return jsonify({'success': False, 'message': 'Le projet de démonstration est en lecture seule.'}), 403
             
         if session.project.user_id != current_user.id and session.user_id != current_user.id:
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
@@ -560,8 +478,6 @@ def create_app():
     def upload_attachment(project_id):
         """Permet d'importer un fichier joint."""
         project = Project.query.get_or_404(project_id)
-        if project.is_demo:
-            return jsonify({'success': False, 'message': 'Le projet de démonstration est en lecture seule.'}), 403
         if project.user_id != current_user.id:
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
             
@@ -603,7 +519,7 @@ def create_app():
     def get_project_attachments(project_id):
         """Récupère toutes les pièces jointes visibles."""
         project = Project.query.get_or_404(project_id)
-        if not project.is_demo and project.user_id != current_user.id:
+        if project.user_id != current_user.id:
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
             
         attachments = Attachment.query.filter_by(project_id=project_id).order_by(Attachment.uploaded_at.desc()).all()
@@ -612,7 +528,6 @@ def create_app():
     @app.route('/uploads/<filename>')
     def serve_uploaded_file(filename):
         """Sert un fichier uploadé de manière sécurisée."""
-        # On n'exige pas de session ici car les images/fichiers peuvent être chargés directement dans l'HTML/style
         return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
     # --- API ANALYSE IA & CHAT ASSISTANT ---
@@ -621,7 +536,7 @@ def create_app():
     def get_project_triangulation_data(project_id):
         """Exécute la triangulation de données pour un projet."""
         project = Project.query.get_or_404(project_id)
-        if not project.is_demo and project.user_id != current_user.id:
+        if project.user_id != current_user.id:
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
             
         analysis = run_project_triangulation(project_id)
@@ -634,7 +549,7 @@ def create_app():
     def chat_assistant(project_id):
         """Endpoint du chat IA."""
         project = Project.query.get_or_404(project_id)
-        if not project.is_demo and project.user_id != current_user.id:
+        if project.user_id != current_user.id:
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
             
         data = request.get_json()
@@ -651,7 +566,7 @@ def create_app():
     def export_project_csv(project_id):
         """Exporte toutes les réponses du projet en fichier CSV."""
         project = Project.query.get_or_404(project_id)
-        if not project.is_demo and project.user_id != current_user.id:
+        if project.user_id != current_user.id:
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
             
         data_list = []
@@ -704,7 +619,7 @@ def create_app():
     def export_project_excel(project_id):
         """Exporte toutes les réponses du projet en fichier Excel."""
         project = Project.query.get_or_404(project_id)
-        if not project.is_demo and project.user_id != current_user.id:
+        if project.user_id != current_user.id:
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
             
         data_list = []
@@ -760,7 +675,7 @@ def create_app():
     def download_global_report(project_id):
         """Génère et télécharge le rapport d'évaluation global en PDF."""
         project = Project.query.get_or_404(project_id)
-        if not project.is_demo and project.user_id != current_user.id:
+        if project.user_id != current_user.id:
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
             
         pdf_filename = f"rapport_evaluation_projet_{project_id}.pdf"
@@ -783,7 +698,7 @@ def create_app():
     def download_session_report(session_id):
         """Génère et télécharge le compte rendu d'entretien en PDF."""
         session = InterviewSession.query.get_or_404(session_id)
-        if not session.project.is_demo and session.project.user_id != current_user.id:
+        if session.project.user_id != current_user.id:
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
             
         pdf_filename = f"compte_rendu_entretien_{session_id}.pdf"

@@ -83,10 +83,7 @@ def migrate():
             # On récupère les lignes SQLite brutes
             sqlite_projects = source_session.execute("SELECT id, name, description, created_at FROM projects").fetchall()
             for row in sqlite_projects:
-                # Vérifier si le projet existe déjà sur la cible pour éviter les doublons
-                # Le projet AEPA sera marqué is_demo=True
                 name = row[1]
-                is_demo = "aepa" in name.lower() or "potable" in name.lower()
                 
                 existing_proj = Project.query.filter_by(name=name).first()
                 if not existing_proj:
@@ -94,13 +91,12 @@ def migrate():
                         name=name,
                         description=row[2],
                         created_at=datetime.strptime(row[3].split('.')[0], "%Y-%m-%d %H:%M:%S") if row[3] else datetime.utcnow(),
-                        is_demo=is_demo,
-                        user_id=demo_user.id if is_demo else None
+                        user_id=demo_user.id
                     )
                     db.session.add(new_proj)
                     db.session.flush() # Récupérer le nouvel ID
                     project_id_map[row[0]] = new_proj.id
-                    print(f"Projet transféré : {name} (Nouveau ID: {new_proj.id}, Démo: {is_demo})")
+                    print(f"Projet transféré : {name} (Nouveau ID: {new_proj.id})")
                 else:
                     project_id_map[row[0]] = existing_proj.id
                     print(f"Projet déjà existant : {name} (ID cible: {existing_proj.id})")
