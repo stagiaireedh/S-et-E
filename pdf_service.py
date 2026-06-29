@@ -41,6 +41,10 @@ class EvaluatorPDF(FPDF):
 
     def multi_cell(self, w, h=0, txt="", *args, **kwargs):
         txt = clean_unicode(txt)
+        if 'new_x' not in kwargs:
+            kwargs['new_x'] = 'LMARGIN'
+        if 'new_y' not in kwargs:
+            kwargs['new_y'] = 'NEXT'
         return super().multi_cell(w, h, txt, *args, **kwargs)
 
         
