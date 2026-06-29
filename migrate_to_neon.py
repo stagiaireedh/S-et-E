@@ -2,7 +2,7 @@ import os
 import bcrypt
 from datetime import datetime
 from flask import Flask
-from models import db, User, Project, Questionnaire, Question, InterviewSession, Answer, Attachment
+from models import db, User, Project, Questionnaire, Question, InterviewSession, Answer, Attachment, SystemConfig
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -42,6 +42,16 @@ def migrate():
         print("Création de la structure des tables sur Neon PostgreSQL...")
         db.create_all()
         print("Structure des tables créée avec succès !")
+
+        # Vérifier si la base de données cible est déjà initialisée
+        try:
+            seeded = SystemConfig.query.filter_by(key='is_seeded').first()
+            if seeded and seeded.value == 'True':
+                print("La base de données PostgreSQL Neon est déjà initialisée (is_seeded = True).")
+                print("Migration annulée pour éviter d'écraser des données de production.")
+                return
+        except Exception as e:
+            print(f"Vérification du flag is_seeded impossible, poursuite : {e}")
 
         # 4. Créer l'utilisateur démo par défaut
         demo_email = "demo@example.com"
@@ -219,6 +229,15 @@ def migrate():
                         uploaded_at=datetime.strptime(row[6].split('.')[0], "%Y-%m-%d %H:%M:%S") if row[6] else datetime.utcnow()
                     )
                     db.session.add(new_att)
+
+            # Enregistrer le flag is_seeded
+            try:
+                seeded_flag = SystemConfig(key='is_seeded', value='True')
+                db.session.add(seeded_flag)
+                db.session.commit()
+                print("Flag is_seeded enregistré en base de données.")
+            except Exception as e:
+                print(f"Impossible d'enregistrer le flag is_seeded : {e}")
 
             db.session.commit()
             print("Félicitations ! Toutes les données existantes ont été migrées avec succès vers Neon PostgreSQL.")

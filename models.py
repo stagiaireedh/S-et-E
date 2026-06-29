@@ -216,3 +216,16 @@ class Attachment(db.Model):
             'file_type': self.file_type,
             'uploaded_at': self.uploaded_at.isoformat() if self.uploaded_at else None
         }
+
+class SystemConfig(db.Model):
+    """Table de configuration système pour stocker l'état global (seeding, etc.)."""
+    __tablename__ = 'system_configs'
+    
+    key = db.Column(db.String(50), primary_key=True)
+    value = db.Column(db.String(255), nullable=False)
+
+    def to_dict(self):
+        return {
+            'key': self.key,
+            'value': self.value
+        }
