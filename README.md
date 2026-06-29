@@ -1,4 +1,4 @@
-# Application de Suivi-Évaluation et Triangulation de Données d'Entretiens
+# S&E-CSB — Suivi-Évaluation & Collecte de Base
 
 Ce projet est une application web conçue pour les équipes de suivi-évaluation (M&E) afin de réaliser la **triangulation des données qualitatives et quantitatives** après des entretiens individuels ou collectifs (focus groups). 
 

@@ -1,6 +1,6 @@
 /**
  * Application de Suivi-Évaluation - Triangulation de Données
- * Logique Frontend JavaScript
+ * Logique Frontend JavaScript - S&E-CSB
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -48,10 +48,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (loader) loader.style.display = 'flex';
     }
     
+    // Rendre accessible globalement pour les scripts d'analyse IA
+    window.showLoader = showLoader;
+    
     function hideLoader() {
         const loader = document.getElementById('loader');
         if (loader) loader.style.display = 'none';
     }
+    
+    window.hideLoader = hideLoader;
     
     // --- CENTRALISATION DES APPELS API AVEC CACHE ET SYNC ---
     const apiCache = new Map();
@@ -767,7 +772,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // Soumission formulaire saisie
+    // Saisie formulaire d'entretien
     formInterviewSaisie.addEventListener('submit', async (e) => {
         e.preventDefault();
         
@@ -1300,12 +1305,53 @@ document.addEventListener('DOMContentLoaded', () => {
     const userAvatarInitials = document.getElementById('user-avatar-initials');
     const userDropdown = document.getElementById('user-dropdown');
     
+    // Validation Client-Side Helpers
+    function validateEmail(email) {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    }
+    
+    function showError(inputEl, message) {
+        const group = inputEl.closest('.form-group-floating');
+        if (!group) return;
+        const feedback = group.querySelector('.error-feedback');
+        if (feedback) {
+            feedback.innerText = message;
+            feedback.classList.add('show');
+        }
+        inputEl.style.borderColor = 'var(--danger)';
+    }
+    
+    function clearError(inputEl) {
+        const group = inputEl.closest('.form-group-floating');
+        if (!group) return;
+        const feedback = group.querySelector('.error-feedback');
+        if (feedback) {
+            feedback.innerText = '';
+            feedback.classList.remove('show');
+        }
+        inputEl.style.borderColor = '';
+    }
+
+    // Effacer toutes les erreurs et formulaires lors du changement d'onglet
+    function resetAuthForms() {
+        formLogin.reset();
+        formRegister.reset();
+        document.querySelectorAll('.error-feedback').forEach(el => {
+            el.innerText = '';
+            el.classList.remove('show');
+        });
+        document.querySelectorAll('.form-group-floating input').forEach(el => {
+            el.style.borderColor = '';
+        });
+    }
+
     // Bascule d'onglets de connexion / inscription
     tabLoginBtn.addEventListener('click', () => {
         tabLoginBtn.classList.add('active');
         tabRegisterBtn.classList.remove('active');
         formLogin.style.display = 'flex';
         formRegister.style.display = 'none';
+        resetAuthForms();
     });
 
     tabRegisterBtn.addEventListener('click', () => {
@@ -1313,6 +1359,73 @@ document.addEventListener('DOMContentLoaded', () => {
         tabLoginBtn.classList.remove('active');
         formRegister.style.display = 'flex';
         formLogin.style.display = 'none';
+        resetAuthForms();
+    });
+
+    // Toggle Password Visibility (icône œil)
+    document.querySelectorAll('.btn-toggle-password').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const wrapper = btn.closest('.password-wrapper');
+            const input = wrapper.querySelector('input');
+            const eyeClosed = btn.querySelector('.eye-closed');
+            
+            if (input.type === 'password') {
+                input.type = 'text';
+                eyeClosed.style.display = 'block';
+            } else {
+                input.type = 'password';
+                eyeClosed.style.display = 'none';
+            }
+        });
+    });
+
+    // Mot de passe oublié (simulation)
+    const btnForgotPassword = document.getElementById('btn-forgot-password');
+    if (btnForgotPassword) {
+        btnForgotPassword.addEventListener('click', (e) => {
+            e.preventDefault();
+            showToast("La réinitialisation du mot de passe sera disponible prochainement.", "info");
+        });
+    }
+
+    // Validation en direct lors de la saisie
+    const inputsToValidate = [
+        { id: 'login-email', type: 'email' },
+        { id: 'login-password', type: 'password_min' },
+        { id: 'register-username', type: 'username' },
+        { id: 'register-email', type: 'email' },
+        { id: 'register-password', type: 'password_min' },
+        { id: 'register-confirm-password', type: 'password_match' }
+    ];
+
+    inputsToValidate.forEach(item => {
+        const input = document.getElementById(item.id);
+        if (input) {
+            input.addEventListener('input', () => {
+                clearError(input);
+                if (item.type === 'email' && input.value.trim() !== '') {
+                    if (!validateEmail(input.value)) {
+                        showError(input, "Adresse email non valide.");
+                    }
+                }
+                if (item.type === 'password_min' && input.value.trim() !== '') {
+                    if (input.value.length < 6) {
+                        showError(input, "Le mot de passe doit faire au moins 6 caractères.");
+                    }
+                }
+                if (item.type === 'username' && input.value.trim() !== '') {
+                    if (input.value.trim().length < 3) {
+                        showError(input, "Le nom doit faire au moins 3 caractères.");
+                    }
+                }
+                if (item.type === 'password_match' && input.value.trim() !== '') {
+                    const original = document.getElementById('register-password').value;
+                    if (input.value !== original) {
+                        showError(input, "Les mots de passe ne correspondent pas.");
+                    }
+                }
+            });
+        }
     });
 
     // Profil dropdown
@@ -1332,15 +1445,29 @@ document.addEventListener('DOMContentLoaded', () => {
     // Soumission Connexion
     formLogin.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const email = document.getElementById('login-email').value;
-        const password = document.getElementById('login-password').value;
+        const emailEl = document.getElementById('login-email');
+        const passwordEl = document.getElementById('login-password');
+        
+        let isValid = true;
+        
+        if (!validateEmail(emailEl.value)) {
+            showError(emailEl, "Veuillez entrer une adresse email valide.");
+            isValid = false;
+        }
+        
+        if (passwordEl.value.length < 6) {
+            showError(passwordEl, "Le mot de passe doit contenir au moins 6 caractères.");
+            isValid = false;
+        }
+        
+        if (!isValid) return;
         
         try {
             showLoader();
             const res = await fetch('/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password })
+                body: JSON.stringify({ email: emailEl.value, password: passwordEl.value })
             });
             const data = await res.json();
             if (data.success) {
@@ -1349,6 +1476,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 initializeUserSession(data.user);
             } else {
                 showToast(data.message || "Identifiants incorrects.", "error");
+                showError(passwordEl, data.message || "Identifiants incorrects.");
             }
         } catch (err) {
             showToast("Impossible de joindre le serveur.", "error");
@@ -1360,16 +1488,45 @@ document.addEventListener('DOMContentLoaded', () => {
     // Soumission Inscription
     formRegister.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const username = document.getElementById('register-username').value;
-        const email = document.getElementById('register-email').value;
-        const password = document.getElementById('register-password').value;
+        const usernameEl = document.getElementById('register-username');
+        const emailEl = document.getElementById('register-email');
+        const passwordEl = document.getElementById('register-password');
+        const confirmEl = document.getElementById('register-confirm-password');
+        
+        let isValid = true;
+        
+        if (usernameEl.value.trim().length < 3) {
+            showError(usernameEl, "Le nom d'utilisateur doit contenir au moins 3 caractères.");
+            isValid = false;
+        }
+        
+        if (!validateEmail(emailEl.value)) {
+            showError(emailEl, "Veuillez entrer une adresse email valide.");
+            isValid = false;
+        }
+        
+        if (passwordEl.value.length < 6) {
+            showError(passwordEl, "Le mot de passe doit contenir au moins 6 caractères.");
+            isValid = false;
+        }
+        
+        if (confirmEl.value !== passwordEl.value) {
+            showError(confirmEl, "Les mots de passe ne correspondent pas.");
+            isValid = false;
+        }
+        
+        if (!isValid) return;
         
         try {
             showLoader();
             const res = await fetch('/api/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, email, password })
+                body: JSON.stringify({ 
+                    username: usernameEl.value.trim(), 
+                    email: emailEl.value.trim(), 
+                    password: passwordEl.value 
+                })
             });
             const data = await res.json();
             if (data.success) {
@@ -1378,6 +1535,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 initializeUserSession(data.user);
             } else {
                 showToast(data.message || "Erreur de création de compte.", "error");
+                showError(emailEl, data.message || "Erreur de création de compte.");
             }
         } catch (err) {
             showToast("Impossible de joindre le serveur.", "error");

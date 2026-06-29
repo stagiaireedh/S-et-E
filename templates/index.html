@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Suivi-Évaluation & Triangulation de Données | AI Evaluator</title>
+    <title>S&E-CSB - Suivi-Évaluation</title>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -34,7 +34,7 @@
                 <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                 </svg>
-                <h2>Triangu<span>M&E</span></h2>
+                <h2>S&E-<span>CSB</span></h2>
             </div>
             
             <div class="auth-tabs">
@@ -42,33 +42,80 @@
                 <button id="tab-register-btn" class="auth-tab-btn">Inscription</button>
             </div>
             
+            <!-- FORMULAIRE CONNEXION -->
             <form id="form-login" class="auth-form">
-                <div class="form-group">
+                <div class="form-group-floating">
+                    <input type="email" id="login-email" placeholder=" " required autocomplete="email">
                     <label for="login-email">Adresse Email</label>
-                    <input type="email" id="login-email" placeholder="demo@example.com" required>
+                    <div class="error-feedback" id="error-login-email"></div>
                 </div>
-                <div class="form-group">
+                
+                <div class="form-group-floating password-wrapper">
+                    <input type="password" id="login-password" placeholder=" " required autocomplete="current-password" minlength="6">
                     <label for="login-password">Mot de passe</label>
-                    <input type="password" id="login-password" placeholder="••••••••" required>
+                    <button type="button" class="btn-toggle-password" tabindex="-1" title="Afficher/masquer le mot de passe">
+                        <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path class="eye-open" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle class="eye-open" cx="12" cy="12" r="3" />
+                            <line class="eye-closed" x1="1" y1="1" x2="23" y2="23" style="display: none;" />
+                        </svg>
+                    </button>
+                    <div class="error-feedback" id="error-login-password"></div>
                 </div>
+                
+                <div class="auth-forgot-link-wrapper">
+                    <a href="#" id="btn-forgot-password" class="forgot-link">Mot de passe oublié ?</a>
+                </div>
+                
                 <button type="submit" class="btn-primary w-100" style="margin-top:10px;">Se Connecter</button>
             </form>
             
+            <!-- FORMULAIRE INSCRIPTION -->
             <form id="form-register" class="auth-form" style="display: none;">
-                <div class="form-group">
+                <div class="form-group-floating">
+                    <input type="text" id="register-username" placeholder=" " required autocomplete="username" minlength="3">
                     <label for="register-username">Nom d'utilisateur</label>
-                    <input type="text" id="register-username" placeholder="nom_utilisateur" required>
+                    <div class="error-feedback" id="error-register-username"></div>
                 </div>
-                <div class="form-group">
+                
+                <div class="form-group-floating">
+                    <input type="email" id="register-email" placeholder=" " required autocomplete="email">
                     <label for="register-email">Adresse Email</label>
-                    <input type="email" id="register-email" placeholder="nom@exemple.com" required>
+                    <div class="error-feedback" id="error-register-email"></div>
                 </div>
-                <div class="form-group">
+                
+                <div class="form-group-floating password-wrapper">
+                    <input type="password" id="register-password" placeholder=" " required autocomplete="new-password" minlength="6">
                     <label for="register-password">Mot de passe</label>
-                    <input type="password" id="register-password" placeholder="••••••••" required>
+                    <button type="button" class="btn-toggle-password" tabindex="-1" title="Afficher/masquer le mot de passe">
+                        <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path class="eye-open" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle class="eye-open" cx="12" cy="12" r="3" />
+                            <line class="eye-closed" x1="1" y1="1" x2="23" y2="23" style="display: none;" />
+                        </svg>
+                    </button>
+                    <div class="error-feedback" id="error-register-password"></div>
                 </div>
+
+                <div class="form-group-floating password-wrapper">
+                    <input type="password" id="register-confirm-password" placeholder=" " required autocomplete="new-password" minlength="6">
+                    <label for="register-confirm-password">Confirmer le mot de passe</label>
+                    <button type="button" class="btn-toggle-password" tabindex="-1" title="Afficher/masquer le mot de passe">
+                        <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path class="eye-open" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle class="eye-open" cx="12" cy="12" r="3" />
+                            <line class="eye-closed" x1="1" y1="1" x2="23" y2="23" style="display: none;" />
+                        </svg>
+                    </button>
+                    <div class="error-feedback" id="error-register-confirm-password"></div>
+                </div>
+                
                 <button type="submit" class="btn-primary w-100" style="margin-top:10px;">Créer un Compte</button>
             </form>
+            
+            <div class="auth-footer">
+                <p>&copy; 2026 S&E-CSB - Tous droits réservés</p>
+            </div>
         </div>
     </div>
 
@@ -98,7 +145,7 @@
                 <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                 </svg>
-                <h2>Triangu<span>M&E</span></h2>
+                <h2>S&E-<span>CSB</span></h2>
             </div>
             
             <div class="project-selector-wrapper">
