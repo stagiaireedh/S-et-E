@@ -10,6 +10,130 @@ document.addEventListener('DOMContentLoaded', () => {
     let projects = [];
     let questionnaires = [];
     let charts = {}; // Stockage des instances de Chart.js pour pouvoir les mettre à jour
+    let editingSessionId = null; // Session ID en cours d'édition
+    
+    // --- UTILS : TOASTS & INDICATEURS DE CHARGEMENT ---
+    function showToast(message, type = 'success') {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+        
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        
+        let icon = 'ℹ️';
+        if (type === 'success') icon = '✅';
+        else if (type === 'error') icon = '❌';
+        else if (type === 'warning') icon = '⚠️';
+        
+        toast.innerHTML = `
+            <span class="toast-icon">${icon}</span>
+            <span class="toast-message">${message}</span>
+        `;
+        
+        container.appendChild(toast);
+        
+        // Force reflow
+        setTimeout(() => toast.classList.add('show'), 10);
+        
+        // Auto-remove
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 400);
+        }, 4000);
+    }
+    
+    function showLoader() {
+        const loader = document.getElementById('loader');
+        if (loader) loader.style.display = 'flex';
+    }
+    
+    function hideLoader() {
+        const loader = document.getElementById('loader');
+        if (loader) loader.style.display = 'none';
+    }
+    
+    // --- CENTRALISATION DES APPELS API AVEC CACHE ET SYNC ---
+    const apiCache = new Map();
+    
+    async function requestAPI(url, options = {}) {
+        const method = options.method || 'GET';
+        
+        if (method === 'GET') {
+            if (apiCache.has(url)) {
+                return apiCache.get(url);
+            }
+            showLoader();
+            try {
+                const res = await fetch(url, options);
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.message || `Erreur HTTP ${res.status}`);
+                }
+                const data = await res.json();
+                apiCache.set(url, data);
+                return data;
+            } catch (err) {
+                showToast(`Erreur de chargement : ${err.message}`, 'error');
+                throw err;
+            } finally {
+                hideLoader();
+            }
+        } else {
+            showLoader();
+            try {
+                const res = await fetch(url, options);
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.message || `Erreur HTTP ${res.status}`);
+                }
+                const data = await res.json();
+                
+                // Vider le cache sur toute écriture
+                apiCache.clear();
+                
+                // Déclencher la synchronisation en temps réel (custom event)
+                document.dispatchEvent(new CustomEvent('dataChanged', { detail: { action: method, url } }));
+                
+                return data;
+            } catch (err) {
+                showToast(`Erreur de traitement : ${err.message}`, 'error');
+                throw err;
+            } finally {
+                hideLoader();
+            }
+        }
+    }
+
+    // --- MODALE DE CONFIRMATION DE SUPPRESSION ---
+    let deleteConfirmCallback = null;
+    
+    function openConfirmModal(itemName, message, onConfirm) {
+        const modal = document.getElementById('modal-confirm-delete');
+        const textEl = document.getElementById('confirm-modal-text');
+        const nameEl = document.getElementById('confirm-modal-item-name');
+        
+        textEl.innerText = message || "Êtes-vous sûr de vouloir supprimer cet élément ?";
+        nameEl.innerText = itemName;
+        
+        deleteConfirmCallback = onConfirm;
+        modal.classList.add('active');
+    }
+    
+    document.getElementById('btn-confirm-delete').addEventListener('click', () => {
+        if (deleteConfirmCallback) {
+            deleteConfirmCallback();
+            deleteConfirmCallback = null;
+        }
+        document.getElementById('modal-confirm-delete').classList.remove('active');
+    });
+    
+    const closeConfirmModal = () => {
+        deleteConfirmCallback = null;
+        document.getElementById('modal-confirm-delete').classList.remove('active');
+    };
+    
+    document.getElementById('btn-close-confirm-modal').addEventListener('click', closeConfirmModal);
+    document.getElementById('btn-cancel-delete').addEventListener('click', closeConfirmModal);
     
     // --- ÉLÉMENTS DU DOM ---
     // Sélecteurs principaux
@@ -82,16 +206,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- 2. GESTION DES PROJETS ---
-    async function loadProjects() {
+    async function loadProjects(selectDefault = true) {
         try {
-            const res = await fetch('/api/projects');
-            projects = await res.json();
+            projects = await requestAPI('/api/projects');
             
             projectSelect.innerHTML = '';
             if (projects.length === 0) {
                 projectSelect.innerHTML = '<option value="" disabled selected>Créer un projet d\'abord</option>';
                 projectTitle.innerText = "Aucun projet";
                 projectDesc.innerText = "Veuillez créer un projet pour commencer.";
+                activeProjectId = null;
                 return;
             }
             
@@ -102,17 +226,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 projectSelect.appendChild(opt);
             });
             
-            // Sélectionner le premier projet par défaut ou réutiliser le dernier actif
-            const savedProjectId = localStorage.getItem('activeProjectId');
-            if (savedProjectId && projects.some(p => p.id == savedProjectId)) {
-                activeProjectId = parseInt(savedProjectId);
-            } else {
-                activeProjectId = projects[0].id;
+            if (selectDefault) {
+                const savedProjectId = localStorage.getItem('activeProjectId');
+                if (savedProjectId && projects.some(p => p.id == savedProjectId)) {
+                    activeProjectId = parseInt(savedProjectId);
+                } else {
+                    activeProjectId = projects[0].id;
+                }
             }
             
             projectSelect.value = activeProjectId;
             updateActiveProjectDetails();
-            loadDashboardData();
         } catch (err) {
             console.error("Erreur de chargement des projets:", err);
         }
@@ -136,6 +260,37 @@ document.addEventListener('DOMContentLoaded', () => {
         switchTab(activeTab);
     });
     
+    // Suppression de Projet
+    async function deleteActiveProject() {
+        if (!activeProjectId) return;
+        const proj = projects.find(p => p.id === activeProjectId);
+        if (!proj) return;
+        
+        openConfirmModal(
+            proj.name,
+            "Êtes-vous sûr de vouloir supprimer ce projet ? Cette action supprimera définitivement le projet, tous les questionnaires, tous les entretiens et toutes les réponses de triangulation associés.",
+            async () => {
+                try {
+                    const res = await requestAPI(`/api/projects/${activeProjectId}`, { method: 'DELETE' });
+                    if (res.success) {
+                        showToast("Projet supprimé avec succès !", "success");
+                        localStorage.removeItem('activeProjectId');
+                        activeProjectId = null;
+                        await loadProjects(true);
+                        switchTab('dashboard');
+                    }
+                } catch (err) {
+                    console.error("Erreur de suppression du projet:", err);
+                }
+            }
+        );
+    }
+    
+    const btnDeleteProject = document.getElementById('btn-delete-project');
+    if (btnDeleteProject) {
+        btnDeleteProject.addEventListener('click', deleteActiveProject);
+    }
+    
     // Modals Projet
     btnNewProject.addEventListener('click', () => modalProject.classList.add('active'));
     document.getElementById('btn-close-project-modal').addEventListener('click', () => modalProject.classList.remove('active'));
@@ -147,21 +302,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const description = document.getElementById('new-project-desc').value;
         
         try {
-            const res = await fetch('/api/projects', {
+            const result = await requestAPI('/api/projects', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name, description })
             });
-            const result = await res.json();
             if (result.success) {
                 modalProject.classList.remove('active');
                 formNewProject.reset();
+                showToast("Projet créé avec succès !", "success");
                 // Recharger et forcer la sélection du nouveau projet
                 localStorage.setItem('activeProjectId', result.project.id);
-                await loadProjects();
+                await loadProjects(true);
             }
         } catch (err) {
-            alert("Erreur lors de la création du projet.");
+            console.error("Erreur lors de la création du projet:", err);
         }
     });
 
@@ -177,14 +332,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         try {
             // 1. Charger les métriques globales
-            const resSessions = await fetch(`/api/projects/${activeProjectId}/sessions`);
-            const sessions = await resSessions.json();
-            
-            const resQuests = await fetch(`/api/projects/${activeProjectId}/questionnaires`);
-            const quests = await resQuests.json();
-            
-            const resAtts = await fetch(`/api/projects/${activeProjectId}/attachments`);
-            const attachments = await resAtts.json();
+            const sessions = await requestAPI(`/api/projects/${activeProjectId}/sessions`);
+            const quests = await requestAPI(`/api/projects/${activeProjectId}/questionnaires`);
+            const attachments = await requestAPI(`/api/projects/${activeProjectId}/attachments`);
             
             document.getElementById('kpi-total-sessions').innerText = sessions.length;
             document.getElementById('kpi-total-questionnaires').innerText = quests.length;
@@ -192,8 +342,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // 2. Charger triangulation IA pour le KPI sentiment
             try {
-                const resTriang = await fetch(`/api/projects/${activeProjectId}/triangulation`);
-                const triang = await resTriang.json();
+                const triang = await requestAPI(`/api/projects/${activeProjectId}/triangulation`);
                 if (triang.success) {
                     const score = triang.avg_sentiment_score;
                     const label = triang.sentiment_label.toUpperCase();
@@ -219,9 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Calcul d'un sentiment individuel moyen pour la ligne
                     let individualScore = 0;
                     if (s.answers.length > 0) {
-                        // Simulation rapide du sentiment de l'entretien (sera amélioré)
                         const scoreSum = s.answers.reduce((acc, a) => {
-                            // Détection simpliste côté JS pour affichage rapide
                             if (a.answer_text.toLowerCase().includes('panne') || a.answer_text.toLowerCase().includes('difficile') || a.answer_text.toLowerCase().includes('problème')) return acc - 0.5;
                             if (a.answer_text.toLowerCase().includes('bon') || a.answer_text.toLowerCase().includes('excellent') || a.answer_text.toLowerCase().includes('très bien')) return acc + 0.5;
                             return acc;
@@ -239,7 +386,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         interpretLabel = 'Négatif';
                     }
                     
-                    // Formater la date en français (JJ/MM/AAAA)
                     const dateObj = new Date(s.interview_date);
                     const formattedDate = dateObj.toLocaleDateString('fr-FR');
                     
@@ -250,9 +396,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         <td><span class="badge ${s.session_type === 'collectif' ? 'badge-warning' : 'badge-info'}">${s.session_type}</span></td>
                         <td><span class="badge ${badgeClass}">${interpretLabel}</span></td>
                         <td>
-                            <button class="btn-link btn-download-session-pdf" data-id="${s.id}" title="Télécharger Fiche PDF">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                            </button>
+                            <div class="table-actions">
+                                <button class="btn-link btn-download-session-pdf" data-id="${s.id}" title="Télécharger Fiche PDF">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                                </button>
+                                <button class="btn-link btn-edit-session" data-id="${s.id}" title="Modifier l'Entretien">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                </button>
+                                <button class="btn-link btn-delete-session" data-id="${s.id}" data-name="${s.title}" title="Supprimer l'Entretien">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                                </button>
+                            </div>
                         </td>
                     `;
                     tbody.appendChild(tr);
@@ -263,6 +417,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     btn.addEventListener('click', (e) => {
                         const sId = btn.getAttribute('data-id');
                         window.open(`/api/sessions/${sId}/report`, '_blank');
+                    });
+                });
+
+                // Ajouter écouteurs d'édition pour chaque fiche
+                document.querySelectorAll('.btn-edit-session').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const sId = btn.getAttribute('data-id');
+                        editSession(parseInt(sId));
+                    });
+                });
+
+                // Ajouter écouteurs de suppression pour chaque fiche
+                document.querySelectorAll('.btn-delete-session').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const sId = btn.getAttribute('data-id');
+                        const sName = btn.getAttribute('data-name');
+                        deleteSession(parseInt(sId), sName);
                     });
                 });
             }
@@ -423,31 +594,27 @@ document.addEventListener('DOMContentLoaded', () => {
     async function uploadFiles(files) {
         if (!activeProjectId) return;
         
+        let successCount = 0;
         for (let i = 0; i < files.length; i++) {
             const formData = new FormData();
             formData.append('file', files[i]);
             
             try {
-                const res = await fetch(`/api/projects/${activeProjectId}/attachments`, {
+                const result = await requestAPI(`/api/projects/${activeProjectId}/attachments`, {
                     method: 'POST',
                     body: formData
                 });
-                const result = await res.json();
-                if (!result.success) {
-                    alert(`Échec de l'upload : ${result.message}`);
+                if (result.success) {
+                    successCount++;
                 }
             } catch (err) {
                 console.error("Erreur d'upload:", err);
             }
         }
         
-        // Recharger les fichiers
-        const res = await fetch(`/api/projects/${activeProjectId}/attachments`);
-        const attachments = await res.json();
-        renderAttachments(attachments);
-        
-        // Mettre à jour le KPI
-        document.getElementById('kpi-total-attachments').innerText = attachments.length;
+        if (successCount > 0) {
+            showToast(`${successCount} fichier(s) joint(s) téléversé(s) avec succès !`, "success");
+        }
     }
     
     function renderAttachments(attachments) {
@@ -489,8 +656,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!activeProjectId) return;
         
         try {
-            const res = await fetch(`/api/projects/${activeProjectId}/questionnaires`);
-            questionnaires = await res.json();
+            questionnaires = await requestAPI(`/api/projects/${activeProjectId}/questionnaires`);
             
             selectQuestionnaire.innerHTML = '<option value="" disabled selected>Choisir un questionnaire...</option>';
             questionnaires.forEach(q => {
@@ -583,26 +749,38 @@ document.addEventListener('DOMContentLoaded', () => {
             answers
         };
         
+        const isEdit = (editingSessionId !== null);
+        const url = isEdit ? `/api/sessions/${editingSessionId}` : `/api/projects/${activeProjectId}/sessions`;
+        const method = isEdit ? 'PUT' : 'POST';
+        
         try {
-            const res = await fetch(`/api/projects/${activeProjectId}/sessions`, {
-                method: 'POST',
+            const result = await requestAPI(url, {
+                method: method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-            const result = await res.json();
             if (result.success) {
-                alert("Entretien enregistré avec succès !");
+                showToast(isEdit ? "Entretien mis à jour avec succès !" : "Entretien enregistré avec succès !", "success");
+                
+                // Réinitialiser le formulaire et l'état d'édition
+                editingSessionId = null;
                 formInterviewSaisie.reset();
                 dynamicQuestionsContainer.innerHTML = '<p class="text-muted text-center py-4">Veuillez d\'abord sélectionner un questionnaire dans le panneau de gauche.</p>';
                 btnSubmitSaisie.disabled = true;
+                btnSubmitSaisie.innerText = "Enregistrer l'Entretien";
+                btnSubmitSaisie.classList.remove('btn-warning');
                 activeQuestionnaireId = null;
                 selectQuestionnaire.value = "";
+                
+                const btnCancelEdit = document.getElementById('btn-cancel-edit-session');
+                if (btnCancelEdit) btnCancelEdit.remove();
+                document.querySelector('#tab-collecte h2').innerText = "Saisie Individuelle & Collective";
                 
                 // Rediriger vers le dashboard
                 switchTab('dashboard');
             }
         } catch (err) {
-            alert("Erreur lors de l'enregistrement de l'entretien.");
+            console.error("Erreur lors de la sauvegarde de l'entretien:", err);
         }
     });
     
@@ -708,8 +886,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!activeProjectId) return;
         
         try {
-            const res = await fetch(`/api/projects/${activeProjectId}/triangulation`);
-            const data = await res.json();
+            const data = await requestAPI(`/api/projects/${activeProjectId}/triangulation`);
             analysisDataGlobal = data;
             
             if (!data.success) {
@@ -797,8 +974,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         try {
             // Récupérer le premier questionnaire pour lister ses questions
-            const res = await fetch(`/api/projects/${activeProjectId}/questionnaires`);
-            const quests = await res.json();
+            const quests = await requestAPI(`/api/projects/${activeProjectId}/questionnaires`);
             if (quests.length === 0) {
                 selectCompareQuestion.innerHTML = '<option value="" disabled selected>Aucun questionnaire...</option>';
                 return;
@@ -990,6 +1166,120 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     });
 
+    // --- 9. UTILS D'ÉDITION & SUPPRESSION DE SESSION ---
+    async function editSession(id) {
+        showLoader();
+        try {
+            const session = await requestAPI(`/api/sessions/${id}`);
+            
+            editingSessionId = id;
+            
+            // Remplir les métadonnées
+            document.getElementById('saisie-title').value = session.title;
+            document.getElementById('saisie-date').value = session.interview_date.split('T')[0];
+            document.getElementById('saisie-interviewer').value = session.interviewer;
+            document.getElementById('saisie-interviewee').value = session.interviewee_name_or_group;
+            document.getElementById('saisie-type-session').value = session.session_type;
+            document.getElementById('saisie-actor-category').value = session.actor_category;
+            
+            // Associer le questionnaire et charger les champs
+            saisieQuestionnaireId.value = session.questionnaire_id;
+            selectQuestionnaire.value = session.questionnaire_id;
+            activeQuestionnaireId = session.questionnaire_id;
+            
+            await loadQuestionnairesList();
+            renderQuestionsFields();
+            
+            // Remplir les réponses textuelles ou sélections
+            session.answers.forEach(ans => {
+                const inputEl = formInterviewSaisie.querySelector(`[name="q_${ans.question_id}"]`);
+                if (inputEl) {
+                    inputEl.value = ans.answer_text;
+                }
+            });
+            
+            // Modifier le style visuel
+            document.querySelector('#tab-collecte h2').innerText = "Modifier l'Entretien";
+            btnSubmitSaisie.innerText = "Mettre à jour l'Entretien";
+            btnSubmitSaisie.classList.add('btn-warning');
+            
+            // Ajouter un bouton d'annulation
+            let btnCancelEdit = document.getElementById('btn-cancel-edit-session');
+            if (!btnCancelEdit) {
+                btnCancelEdit = document.createElement('button');
+                btnCancelEdit.id = 'btn-cancel-edit-session';
+                btnCancelEdit.type = 'button';
+                btnCancelEdit.className = 'btn-secondary';
+                btnCancelEdit.style.marginLeft = '12px';
+                btnCancelEdit.innerText = "Annuler la modification";
+                btnCancelEdit.addEventListener('click', cancelEditSession);
+                btnSubmitSaisie.parentNode.appendChild(btnCancelEdit);
+            }
+            
+            switchTab('collecte');
+            showToast("Entretien chargé dans le formulaire !", "info");
+        } catch (err) {
+            console.error("Erreur de chargement d'édition :", err);
+        } finally {
+            hideLoader();
+        }
+    }
+    
+    function cancelEditSession() {
+        editingSessionId = null;
+        formInterviewSaisie.reset();
+        dynamicQuestionsContainer.innerHTML = '<p class="text-muted text-center py-4">Veuillez d\'abord sélectionner un questionnaire dans le panneau de gauche.</p>';
+        btnSubmitSaisie.disabled = true;
+        btnSubmitSaisie.innerText = "Enregistrer l'Entretien";
+        btnSubmitSaisie.classList.remove('btn-warning');
+        selectQuestionnaire.value = "";
+        activeQuestionnaireId = null;
+        
+        const btnCancelEdit = document.getElementById('btn-cancel-edit-session');
+        if (btnCancelEdit) btnCancelEdit.remove();
+        
+        document.querySelector('#tab-collecte h2').innerText = "Saisie Individuelle & Collective";
+        switchTab('dashboard');
+        showToast("Modification annulée.", "info");
+    }
+    
+    async function deleteSession(id, name) {
+        openConfirmModal(
+            name || `Entretien #${id}`,
+            "Êtes-vous sûr de vouloir supprimer cet entretien ? Cette opération supprimera définitivement toutes les réponses et verbatims saisis.",
+            async () => {
+                try {
+                    const res = await requestAPI(`/api/sessions/${id}`, { method: 'DELETE' });
+                    if (res.success) {
+                        showToast("Entretien supprimé avec succès !", "success");
+                    }
+                } catch (err) {
+                    console.error("Erreur lors de la suppression de l'entretien :", err);
+                }
+            }
+        );
+    }
+
+    // --- ÉCOUTEUR SYNC DES ONGLETS (dataChanged) ---
+    document.addEventListener('dataChanged', async (e) => {
+        console.log("Synchronisation globale déclenchée par :", e.detail);
+        
+        // 1. Recharger les projets de façon transparente
+        await loadProjects(false);
+        
+        // 2. Recharger l'onglet actif
+        const activeTab = document.querySelector('.nav-item.active').getAttribute('data-tab');
+        if (activeTab === 'dashboard') {
+            loadDashboardData();
+        } else if (activeTab === 'collecte') {
+            loadQuestionnairesList();
+        } else if (activeTab === 'analyse') {
+            loadTriangulationData();
+        }
+    });
+
     // --- 10. INITIALISATION GENERALE ---
-    loadProjects();
+    loadProjects(true).then(() => {
+        loadDashboardData();
+    });
 });

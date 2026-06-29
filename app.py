@@ -125,6 +125,25 @@ def create_app():
         db.session.commit()
         return jsonify({'success': True, 'project': project.to_dict()}), 201
 
+    @app.route('/api/projects/<int:project_id>', methods=['DELETE'])
+    def delete_project(project_id):
+        """Supprime un projet en cascade (base de données et pièces jointes sur le disque)."""
+        project = Project.query.get_or_404(project_id)
+        
+        # Supprimer physiquement les fichiers joints associés de l'arborescence
+        try:
+            for attachment in project.attachments:
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], attachment.filepath)
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+        except Exception as e:
+            app.logger.error(f"Erreur lors de la suppression des pièces jointes physiques : {e}")
+
+        db.session.delete(project)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Projet et toutes ses données associées supprimés.'})
+
+
     @app.route('/api/projects/<int:project_id>/questionnaires', methods=['GET'])
     def get_project_questionnaires(project_id):
         """Récupère les questionnaires associés à un projet."""
@@ -166,6 +185,30 @@ def create_app():
         """Récupère les détails complets d'un questionnaire (y compris ses questions)."""
         questionnaire = Questionnaire.query.get_or_404(questionnaire_id)
         return jsonify(questionnaire.to_dict())
+
+    @app.route('/api/questions/<int:question_id>', methods=['PUT'])
+    def update_question(question_id):
+        """Met à jour le texte et les choix d'une question existante."""
+        question = Question.query.get_or_404(question_id)
+        data = request.get_json()
+        if not data or not data.get('text'):
+            return jsonify({'success': False, 'message': 'Le texte de la question est requis.'}), 400
+            
+        question.text = data['text']
+        question.question_type = data.get('question_type', question.question_type)
+        question.choices = data.get('choices', question.choices)
+        
+        db.session.commit()
+        return jsonify({'success': True, 'question': question.to_dict()})
+
+    @app.route('/api/questions/<int:question_id>', methods=['DELETE'])
+    def delete_question(question_id):
+        """Supprime une question spécifique (cascade automatique sur les réponses)."""
+        question = Question.query.get_or_404(question_id)
+        db.session.delete(question)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Question supprimée avec succès.'})
+
 
     # --- API SESSIONS D'ENTRETIEN ---
     @app.route('/api/projects/<int:project_id>/sessions', methods=['GET'])
@@ -216,6 +259,59 @@ def create_app():
         """Récupère les détails d'une session et ses réponses."""
         session = InterviewSession.query.get_or_404(session_id)
         return jsonify(session.to_dict())
+
+    @app.route('/api/sessions/<int:session_id>', methods=['PUT'])
+    def update_interview_session(session_id):
+        """Met à jour un entretien existant et ses réponses."""
+        session = InterviewSession.query.get_or_404(session_id)
+        data = request.get_json()
+        if not data or not data.get('title'):
+            return jsonify({'success': False, 'message': 'Le titre est requis.'}), 400
+            
+        session.title = data['title']
+        session.interviewer = data.get('interviewer', session.interviewer)
+        session.interviewee_name_or_group = data.get('interviewee_name_or_group', session.interviewee_name_or_group)
+        session.actor_category = data.get('actor_category', session.actor_category)
+        session.session_type = data.get('session_type', session.session_type)
+        session.interview_date = secure_date(data.get('interview_date'))
+        
+        # Supprimer les anciennes réponses pour réinsérer les nouvelles
+        Answer.query.filter_by(session_id=session.id).delete()
+        
+        # Insérer les nouvelles réponses
+        answers = data.get('answers', {})
+        for q_id, ans_text in answers.items():
+            if ans_text and str(ans_text).strip():
+                answer = Answer(
+                    session_id=session.id,
+                    question_id=int(q_id),
+                    answer_text=str(ans_text)
+                )
+                db.session.add(answer)
+                
+        db.session.commit()
+        return jsonify({'success': True, 'session': session.to_dict()})
+
+    @app.route('/api/sessions/<int:session_id>', methods=['DELETE'])
+    def delete_interview_session(session_id):
+        """Supprime un entretien en cascade (base et pièces jointes associées)."""
+        session = InterviewSession.query.get_or_404(session_id)
+        
+        # Supprimer les pièces jointes associées sur le disque
+        try:
+            for attachment in session.attachments:
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], attachment.filepath)
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+                # Supprimer la liaison en DB
+                db.session.delete(attachment)
+        except Exception as e:
+            app.logger.error(f"Erreur lors de la suppression des pièces jointes de la session : {e}")
+            
+        db.session.delete(session)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Entretien et réponses associés supprimés.'})
+
 
     # --- API IMPORT DE PIÈCES JOINTES ---
     @app.route('/api/projects/<int:project_id>/attachments', methods=['POST'])
