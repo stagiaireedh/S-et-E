@@ -696,7 +696,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectQuestionnaire = document.getElementById('collecte-questionnaire-select');
     const saisieQuestionnaireId = document.getElementById('saisie-questionnaire-id');
     const dynamicQuestionsContainer = document.getElementById('dynamic-questions-container');
-    const btnSubmitSaisie = document.get    async function loadQuestionnairesList() {
+    const btnSubmitSaisie = document.getElementById('btn-submit-saisie');
+
+    async function loadQuestionnairesList() {
         if (!activeProjectId) {
             selectQuestionnaire.innerHTML = '<option value="" disabled selected>Créer un projet d\'abord...</option>';
             const btnShare = document.getElementById('btn-share-questionnaire');
@@ -1020,12 +1022,8 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
             console.error("Erreur lors de la sauvegarde de l'entretien:", err);
         }
-    });
-    
+    });    
     // --- MODAL CREATION DE QUESTIONNAIRE (CANVA/NOTION STYLE) ---
-    const btnCreateQuestionnaire = document.getElementById('btn-create-questionnaire');
-    const formSelectTemplateCreate = document.getElementById('form-select-template-create');
-    const modalCreateQuestionnaireSelect = document.getElementById('modal-create-questionnaire-select');
     const builderOverlay = document.getElementById('builder-overlay');
     const builderCanvas = document.getElementById('builder-canvas-area');
     const builderSavedBlocksContainer = document.getElementById('builder-saved-blocks-container');
@@ -1036,6 +1034,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeBuilderQuestionnaireId = null;
     let builderBlocks = [];
     let selectedBlockId = null;
+
     
     // Ouvrir la sélection de modèle
     btnCreateQuestionnaire.addEventListener('click', () => {
@@ -1747,7 +1746,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- ASSISTANT IA CRÉATION ---
     const btnTriggerAiBuilder = document.getElementById('btn-trigger-ai-builder');
-    const modalAiAssistantQuest = document.getElementById('modal-ai-assistant-quest');
     
     btnTriggerAiBuilder.addEventListener('click', () => {
         document.getElementById('ai-quest-prompt-input').value = '';
@@ -1795,7 +1793,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- IMPORTS DE FICHIERS QUESTIONNAIRE (IA) ---
     const btnTriggerImportBuilder = document.getElementById('btn-trigger-import-builder');
-    const modalImportQuestionnaire = document.getElementById('modal-import-questionnaire');
     const importFileDropArea = document.getElementById('import-file-drop-area');
     const importFileInput = document.getElementById('import-file-input');
     const btnConfirmImportQuest = document.getElementById('btn-confirm-import-quest');
