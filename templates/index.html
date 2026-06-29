@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suivi-Évaluation & Triangulation de Données | AI Evaluator</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Custom Style Sheet -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- Lumières d'ambiance décoratives en arrière-plan -->
+    <div class="glow-bg bg-indigo"></div>
+    <div class="glow-bg bg-purple"></div>
+    <div class="glow-bg bg-cyan"></div>
+
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                </svg>
+                <h2>Triangu<span>M&E</span></h2>
+            </div>
+            
+            <div class="project-selector-wrapper">
+                <label for="global-project-select">PROJET ACTIF</label>
+                <select id="global-project-select" class="custom-select">
+                    <option value="" disabled selected>Chargement...</option>
+                </select>
+                <button id="btn-new-project" class="btn-secondary btn-sm">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                    Nouveau Projet
+                </button>
+            </div>
+
+            <nav class="nav-menu">
+                <a href="#dashboard" class="nav-item active" data-tab="dashboard">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>
+                    </svg>
+                    Tableau de Bord
+                </a>
+                <a href="#collecte" class="nav-item" data-tab="collecte">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+                    </svg>
+                    Collecte & Saisie
+                </a>
+                <a href="#analyse" class="nav-item" data-tab="analyse">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+                    </svg>
+                    Analyse Triangulation
+                </a>
+                <a href="#assistant" class="nav-item" data-tab="assistant">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    Assistant IA Chat
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <p>Version Évaluation 1.0</p>
+                <small>IA M&E Engine Activé</small>
+            </div>
+        </aside>
+
+        <!-- Main Workspace Area -->
+        <main class="main-content">
+            <!-- Header Bar -->
+            <header class="content-header">
+                <div class="header-title">
+                    <h1 id="current-project-title">Nom du Projet</h1>
+                    <p id="current-project-desc" class="text-muted">Description du projet actif...</p>
+                </div>
+                <div class="header-actions">
+                    <button id="btn-export-global-pdf" class="btn-primary">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                        Exporter Rapport PDF
+                    </button>
+                </div>
+            </header>
+
+            <!-- ================= TAB: DASHBOARD ================= -->
+            <section id="tab-dashboard" class="tab-pane active">
+                <!-- KPI Indicators Grid -->
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-icon bg-indigo-soft">
+                            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#6366f1" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="kpi-total-sessions">0</span>
+                            <span class="kpi-label">Entretiens Réalisés</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon bg-cyan-soft">
+                            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#06b6d4" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="kpi-sentiment-avg">-</span>
+                            <span class="kpi-label">Sentiment Moyen</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon bg-purple-soft">
+                            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#a855f7" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><polyline points="10 9 9 9 8 9"/></svg>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="kpi-total-questionnaires">0</span>
+                            <span class="kpi-label">Questionnaires Actifs</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon bg-pink-soft">
+                            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#ec4899" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="kpi-total-attachments">0</span>
+                            <span class="kpi-label">Pièces Jointes Importées</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Area -->
+                <div class="dashboard-charts">
+                    <div class="card chart-card">
+                        <h3>Acteurs interviewés par catégorie</h3>
+                        <div class="canvas-container">
+                            <canvas id="chart-actors-distribution"></canvas>
+                        </div>
+                    </div>
+                    <div class="card chart-card">
+                        <h3>Tendance des Sentiments</h3>
+                        <div class="canvas-container">
+                            <canvas id="chart-sentiments-trend"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Session list / Recent Uploads -->
+                <div class="dashboard-lists">
+                    <!-- Recent Sessions -->
+                    <div class="card recent-list-card">
+                        <div class="card-header-flex">
+                            <h3>Entretiens Récents</h3>
+                            <button id="btn-quick-saisie" class="btn-link">Saisir un entretien</button>
+                        </div>
+                        <div class="table-container">
+                            <table class="custom-table" id="table-recent-sessions">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Titre / Groupe</th>
+                                        <th>Catégorie</th>
+                                        <th>Type</th>
+                                        <th>Interprétation</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Rempli dynamiquement -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Project Documents / Attachments -->
+                    <div class="card recent-list-card">
+                        <div class="card-header-flex">
+                            <h3>Documents et Pièces Jointes</h3>
+                        </div>
+                        <div class="file-drop-zone" id="file-drop-area">
+                            <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                            </svg>
+                            <p>Glissez-déposez vos fichiers ici ou <span class="file-browse-btn">parcourez</span></p>
+                            <input type="file" id="file-upload-input" style="display:none;" multiple>
+                        </div>
+                        <div class="attachments-list" id="attachments-container-list">
+                            <!-- Rempli dynamiquement -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ================= TAB: COLLECTE & SAISIE ================= -->
+            <section id="tab-collecte" class="tab-pane">
+                <div class="collecte-layout">
+                    <!-- Left Column: Create Questionnaire / Choose questionnaire -->
+                    <div class="card select-questionnaire-card">
+                        <h3>Gestion des Questionnaires</h3>
+                        <div class="form-group">
+                            <label for="collecte-questionnaire-select">Sélectionner un Questionnaire</label>
+                            <select id="collecte-questionnaire-select" class="custom-select">
+                                <option value="" disabled selected>Choisir un questionnaire...</option>
+                            </select>
+                        </div>
+                        <div class="divider">ou</div>
+                        <button id="btn-create-questionnaire" class="btn-secondary btn-block">
+                            Créer un nouveau Questionnaire
+                        </button>
+                    </div>
+
+                    <!-- Right Column: Manual Entry Form -->
+                    <div class="card form-saisie-card">
+                        <h3>Saisie Manuelle d'Entretien</h3>
+                        <form id="form-interview-saisie">
+                            <input type="hidden" id="saisie-questionnaire-id">
+                            
+                            <div class="form-row-2">
+                                <div class="form-group">
+                                    <label for="saisie-title">Titre de la Session d'Entretien *</label>
+                                    <input type="text" id="saisie-title" placeholder="Ex: Entretien individuel avec le maraîcher" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="saisie-date">Date de l'entretien *</label>
+                                    <input type="date" id="saisie-date" required>
+                                </div>
+                            </div>
+
+                            <div class="form-row-3">
+                                <div class="form-group">
+                                    <label for="saisie-interviewer">Enquêteur / Évaluateur *</label>
+                                    <input type="text" id="saisie-interviewer" placeholder="Ex: Sophie Diouf" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="saisie-interviewee">Nom de l'interlocuteur / Groupe *</label>
+                                    <input type="text" id="saisie-interviewee" placeholder="Ex: Focus Group B (10 personnes)" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="saisie-type-session">Format</label>
+                                    <select id="saisie-type-session" class="custom-select">
+                                        <option value="individuel">Individuel</option>
+                                        <option value="collectif">Collectif (Focus Group)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="saisie-actor-category">Catégorie d'Acteur *</label>
+                                <select id="saisie-actor-category" class="custom-select" required>
+                                    <option value="Bénéficiaire">Bénéficiaire (Direct/Indirect)</option>
+                                    <option value="Partenaire">Partenaire (ONG, Technique, Financier)</option>
+                                    <option value="Équipe Projet">Équipe Projet (Exécutants, Staff)</option>
+                                    <option value="Autorité Locale">Autorité Locale (Mairie, Chef de village)</option>
+                                </select>
+                            </div>
+
+                            <div class="divider">RÉPONSES DU PARTICIPANT</div>
+
+                            <!-- Questions list fields dynamically populated by JavaScript -->
+                            <div id="dynamic-questions-container">
+                                <p class="text-muted text-center py-4">Veuillez d'abord sélectionner un questionnaire dans le panneau de gauche pour afficher les champs de réponse.</p>
+                            </div>
+
+                            <div class="form-actions-footer">
+                                <button type="reset" class="btn-clear">Effacer</button>
+                                <button type="submit" class="btn-primary" id="btn-submit-saisie" disabled>Enregistrer l'Entretien</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ================= TAB: ANALYSE TRIANGULATION ================= -->
+            <section id="tab-analyse" class="tab-pane">
+                <div class="analyse-grid-container">
+                    <!-- Left: AI Analytics Summary Card -->
+                    <div class="card ai-triangulation-card">
+                        <div class="ai-badge-header">
+                            <span class="badge-ai">IA TRIANGULATION</span>
+                            <h2>Analyse Qualitative Automatisée</h2>
+                        </div>
+                        
+                        <div class="ai-sentiment-indicator">
+                            <div class="sentiment-gauge-circle" id="ai-gauge-sentiment-label">Neutre</div>
+                            <div class="sentiment-details-desc">
+                                <p class="metric-desc">Satisfaction générale du projet</p>
+                                <p class="metric-score" id="ai-metric-score-value">Score de sentiment: 0.0</p>
+                            </div>
+                        </div>
+
+                        <div class="divider"></div>
+
+                        <!-- Themes -->
+                        <div class="ai-themes-section">
+                            <h3>Thèmes récurrents extraits</h3>
+                            <div id="ai-themes-list">
+                                <!-- Dynamique -->
+                            </div>
+                        </div>
+
+                        <div class="divider"></div>
+
+                        <!-- Recommendations list -->
+                        <div class="ai-recommendations-section">
+                            <h3>Recommandations de l'Assistant IA</h3>
+                            <div class="recommendations-container" id="ai-recommendations-list">
+                                <!-- Dynamique -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Comparative & Triangulation table -->
+                    <div class="card triangulation-table-card">
+                        <div class="card-header-flex">
+                            <h3>Matrice de Triangulation Comparative</h3>
+                            <div class="form-group-inline">
+                                <label for="compare-question-select">Question à comparer :</label>
+                                <select id="compare-question-select" class="custom-select">
+                                    <!-- Rempli dynamiquement -->
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="triangulation-matrix" id="triangulation-matrix-cards">
+                            <!-- Rempli en JS sous forme de cartes d'acteurs côte à côte pour comparaison -->
+                            <div class="text-center text-muted py-5">
+                                <p>Sélectionnez une question ci-dessus pour confronter les témoignages des différentes catégories d'acteurs.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ================= TAB: ASSISTANT IA ================= -->
+            <section id="tab-assistant" class="tab-pane">
+                <div class="card assistant-chat-card">
+                    <div class="chat-header">
+                        <div class="chat-header-info">
+                            <div class="assistant-avatar">
+                                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3>Assistant IA de Triangulation</h3>
+                                <p class="status-indicator"><span class="dot-online"></span> Grounded dans la base de données locale</p>
+                            </div>
+                        </div>
+                        <button class="btn-clear btn-sm" id="btn-clear-chat">Vider la discussion</button>
+                    </div>
+
+                    <!-- Chat conversation scrollable area -->
+                    <div class="chat-messages-container" id="chat-messages-area">
+                        <!-- Message d'accueil de l'agent -->
+                        <div class="message incoming">
+                            <div class="msg-bubble">
+                                Bonjour ! Je suis votre assistant de suivi-évaluation. Je peux analyser les témoignages collectés et répondre à vos requêtes sur ce projet.
+                                <br><br>
+                                Vous pouvez me demander par exemple :
+                                <ul>
+                                    <li><em>"Fais-moi une synthèse globale du projet"</em></li>
+                                    <li><em>"Quels sont les principaux risques identifiés par les bénéficiaires ?"</em></li>
+                                    <li><em>"Quelles recommandations ont été formulées ?"</em></li>
+                                    <li><em>"Compare les avis sur la gestion financière"</em></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Input bar -->
+                    <div class="chat-input-bar">
+                        <input type="text" id="chat-input-field" placeholder="Posez une question sur les données d'évaluation (ex: pannes, sentiment des partenaires...)" autocomplete="off">
+                        <button id="btn-send-message" class="btn-primary">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- MODAL: AJOUTER UN NOUVEAU PROJET -->
+    <div class="modal-overlay" id="modal-project">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2>Nouveau Projet d'Évaluation</h2>
+                <button class="modal-close" id="btn-close-project-modal">&times;</button>
+            </div>
+            <form id="form-new-project">
+                <div class="form-group">
+                    <label for="new-project-name">Nom du Projet *</label>
+                    <input type="text" id="new-project-name" placeholder="Ex: Projet d'Accès à l'Énergie Verte" required>
+                </div>
+                <div class="form-group">
+                    <label for="new-project-desc">Description du Projet</label>
+                    <textarea id="new-project-desc" rows="4" placeholder="Objectifs globaux, bénéficiaires cibles..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="btn-cancel-project-modal">Annuler</button>
+                    <button type="submit" class="btn-primary">Créer le Projet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: AJOUTER UN NOUVEAU QUESTIONNAIRE -->
+    <div class="modal-overlay" id="modal-questionnaire">
+        <div class="modal-card modal-lg">
+            <div class="modal-header">
+                <h2>Créer un Questionnaire</h2>
+                <button class="modal-close" id="btn-close-quest-modal">&times;</button>
+            </div>
+            <form id="form-new-questionnaire">
+                <div class="form-group">
+                    <label for="new-quest-title">Titre du Questionnaire *</label>
+                    <input type="text" id="new-quest-title" placeholder="Ex: Évaluation Finale - Infrastructures" required>
+                </div>
+                <div class="form-group">
+                    <label for="new-quest-desc">Description / Objectif du questionnaire</label>
+                    <textarea id="new-quest-desc" rows="2" placeholder="Ex: Mesurer l'appropriation locale et la durabilité"></textarea>
+                </div>
+                
+                <div class="divider">QUESTIONS</div>
+                
+                <div id="modal-questions-list">
+                    <!-- Ligne de question dynamique -->
+                </div>
+                
+                <button type="button" id="btn-add-question-row" class="btn-secondary btn-sm" style="margin-top:10px;">
+                    + Ajouter une Question
+                </button>
+                
+                <div class="form-actions" style="margin-top:20px;">
+                    <button type="button" class="btn-secondary" id="btn-cancel-quest-modal">Annuler</button>
+                    <button type="submit" class="btn-primary">Créer le Questionnaire</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Script de l'application -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

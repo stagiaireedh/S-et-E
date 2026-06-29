@@ -1,0 +1,25 @@
+# Ignorer les clés API sensibles
+.env
+
+# Ignorer la base de données SQLite locale de développement
+*.db
+*.db-journal
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.env/
+
+# Fichiers d'uploads locaux
+uploads/*
+!uploads/.gitkeep
+
+# IDE et OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
