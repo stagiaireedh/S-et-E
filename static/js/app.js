@@ -176,6 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnNewProject = document.getElementById('btn-new-project');
     const btnExportGlobalPdf = document.getElementById('btn-export-global-pdf');
     const btnQuickSaisie = document.getElementById('btn-quick-saisie');
+    const btnCreateQuestionnaire = document.getElementById('btn-create-questionnaire');
     
     // Modals
     const modalProject = document.getElementById('modal-project');
@@ -187,6 +188,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const formNewProject = document.getElementById('form-new-project');
     const formSelectTemplateCreate = document.getElementById('form-select-template-create');
     const formInterviewSaisie = document.getElementById('form-interview-saisie');
+    
+    // Collecte & Saisie
+    const selectQuestionnaire = document.getElementById('collecte-questionnaire-select');
+    const saisieQuestionnaireId = document.getElementById('saisie-questionnaire-id');
+    const dynamicQuestionsContainer = document.getElementById('dynamic-questions-container');
+    const btnSubmitSaisie = document.getElementById('btn-submit-saisie');
 
     // --- 1. GESTION DES ONGLETS ---
     function switchTab(tabId) {
@@ -693,10 +700,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- 7. ONGLET COLLECTE & CREATION QUESTIONNAIRE ---
-    const selectQuestionnaire = document.getElementById('collecte-questionnaire-select');
-    const saisieQuestionnaireId = document.getElementById('saisie-questionnaire-id');
-    const dynamicQuestionsContainer = document.getElementById('dynamic-questions-container');
-    const btnSubmitSaisie = document.getElementById('btn-submit-saisie');
 
     async function loadQuestionnairesList() {
         if (!activeProjectId) {
