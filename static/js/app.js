@@ -63,6 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     async function requestAPI(url, options = {}) {
         const method = options.method || 'GET';
+        const silent = options.silent || false;
         
         if (method === 'GET') {
             if (apiCache.has(url)) {
@@ -88,7 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 apiCache.set(url, data);
                 return data;
             } catch (err) {
-                if (err.message !== "Authentification requise.") {
+                if (err.message !== "Authentification requise." && !silent) {
                     showToast(`Erreur de chargement : ${err.message}`, 'error');
                 }
                 throw err;
@@ -121,7 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 return data;
             } catch (err) {
-                if (err.message !== "Authentification requise.") {
+                if (err.message !== "Authentification requise." && !silent) {
                     showToast(`Erreur de traitement : ${err.message}`, 'error');
                 }
                 throw err;
@@ -407,7 +408,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('kpi-total-attachments').innerText = attachments.length;
             
             try {
-                const triang = await requestAPI(`/api/projects/${activeProjectId}/triangulation`);
+                const triang = await requestAPI(`/api/projects/${activeProjectId}/triangulation`, { silent: true });
                 if (triang.success) {
                     const score = triang.avg_sentiment_score;
                     const label = triang.sentiment_label.toUpperCase();
@@ -615,7 +616,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const dropZone = document.getElementById('file-drop-area');
     const fileInput = document.getElementById('file-upload-input');
     
-    dropZone.addEventListener('click', () => {
+    fileInput.addEventListener('click', (e) => e.stopPropagation());
+    
+    dropZone.addEventListener('click', (e) => {
+        if (e.target === fileInput) return;
         if (!activeProjectId) {
             showToast("Veuillez d'abord sélectionner ou créer un projet.", "warning");
             return;
@@ -676,6 +680,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (successCount > 0) {
             showToast(`${successCount} fichier(s) joint(s) téléversé(s) avec succès !`, "success");
+            await loadDashboardData();
         }
     }
     
@@ -1855,7 +1860,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-close-import-modal').addEventListener('click', () => modalImportQuestionnaire.classList.remove('active'));
     document.getElementById('btn-cancel-import-quest').addEventListener('click', () => modalImportQuestionnaire.classList.remove('active'));
     
-    importFileDropArea.addEventListener('click', () => importFileInput.click());
+    importFileInput.addEventListener('click', (e) => e.stopPropagation());
+    
+    importFileDropArea.addEventListener('click', (e) => {
+        if (e.target === importFileInput) return;
+        importFileInput.click();
+    });
     
     importFileInput.addEventListener('change', (e) => {
         if (e.target.files.length > 0) handleImportFile(e.target.files[0]);
@@ -1983,7 +1993,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         try {
-            const data = await requestAPI(`/api/projects/${activeProjectId}/triangulation`);
+            const data = await requestAPI(`/api/projects/${activeProjectId}/triangulation`, { silent: true });
             analysisDataGlobal = data;
             
             if (!data.success) {

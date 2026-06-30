@@ -558,8 +558,6 @@ def create_app():
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
             
         analysis = run_project_triangulation(project_id)
-        if not analysis.get('success'):
-            return jsonify(analysis), 400
         return jsonify(analysis)
 
     @app.route('/api/projects/<int:project_id>/chat', methods=['POST'])
