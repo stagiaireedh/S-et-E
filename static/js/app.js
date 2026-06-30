@@ -301,7 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const btnDeleteProject = document.getElementById('btn-delete-project');
             const btnCreateQuestionnaire = document.getElementById('btn-create-questionnaire');
             if (btnDeleteProject) btnDeleteProject.style.display = 'none';
-            if (btnCreateQuestionnaire) btnCreateQuestionnaire.disabled = true;
+            if (btnCreateQuestionnaire) btnCreateQuestionnaire.disabled = false;
         }
     }
     
@@ -1042,7 +1042,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Ouvrir la sélection de modèle
     btnCreateQuestionnaire.addEventListener('click', () => {
         if (!activeProjectId) {
-            showToast("Veuillez sélectionner un projet actif d'abord.", "warning");
+            showToast("Veuillez d'abord sélectionner ou créer un projet actif (en haut à droite).", "warning");
             return;
         }
         document.getElementById('select-template-title').value = '';
