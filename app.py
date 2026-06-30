@@ -1190,6 +1190,16 @@ def create_app():
             
         return jsonify(quest.to_dict())
 
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        if request.path.startswith('/api/'):
+            from werkzeug.exceptions import HTTPException
+            if isinstance(e, HTTPException):
+                return jsonify({'success': False, 'message': e.description}), e.code
+            app.logger.error(f"Erreur interne du serveur : {e}")
+            return jsonify({'success': False, 'message': f"Erreur interne : {str(e)}"}), 500
+        return e
+
     return app
 
 def secure_date(date_str):

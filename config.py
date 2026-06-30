@@ -39,6 +39,10 @@ class Config:
         UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
         
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 280,
+    }
 
     
     # Taille maximale autorisée pour les fichiers (16 Mo)

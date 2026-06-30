@@ -355,6 +355,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const name = document.getElementById('new-project-name').value;
         const description = document.getElementById('new-project-desc').value;
         
+        if (name && name.length > 255) {
+            showToast("Le nom du projet ne doit pas dépasser 255 caractères.", "warning");
+            return;
+        }
+        
         try {
             const result = await requestAPI('/api/projects', {
                 method: 'POST',
@@ -1081,6 +1086,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const title = document.getElementById('select-template-title').value;
         const template_id = formSelectTemplateCreate.querySelector('input[name="template_cat"]:checked').value;
         
+        if (title && title.length > 255) {
+            showToast("Le titre du questionnaire ne doit pas dépasser 255 caractères.", "warning");
+            return;
+        }
+        
         try {
             const res = await requestAPI('/api/questionnaires/from-template', {
                 method: 'POST',
@@ -1335,6 +1345,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!block) return;
         
         renderPropertiesPanel(block);
+        
+        // Auto-focus le champ d'édition principal dans le panneau de propriétés pour "donner la main" directement
+        setTimeout(() => {
+            const primaryInput = document.getElementById('prop-q-label') || 
+                                 document.getElementById('prop-section-title') || 
+                                 document.getElementById('prop-text-content') || 
+                                 document.getElementById('prop-title-text') || 
+                                 document.getElementById('prop-generic-label');
+            if (primaryInput) {
+                primaryInput.focus();
+                // Sélectionner tout le texte pour faciliter le remplacement rapide
+                primaryInput.select();
+            }
+        }, 50);
     }
     
     function renderPropertiesPanel(block) {
