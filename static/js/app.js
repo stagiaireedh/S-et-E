@@ -1046,15 +1046,33 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         document.getElementById('select-template-title').value = '';
-        modalCreateQuestionnaireSelect.style.display = 'flex';
+        modalCreateQuestionnaireSelect.classList.add('active');
+        
+        // S'assurer que le premier modèle (Vide) est coché par défaut et actif visuellement
+        const firstRadio = formSelectTemplateCreate.querySelector('input[name="template_cat"][value="vide"]');
+        if (firstRadio) {
+            firstRadio.checked = true;
+            document.querySelectorAll('.template-option').forEach(opt => opt.classList.remove('active'));
+            firstRadio.closest('.template-option').classList.add('active');
+        }
     });
     
     // Fermer les modales de création
     document.getElementById('btn-close-select-template-modal').addEventListener('click', () => {
-        modalCreateQuestionnaireSelect.style.display = 'none';
+        modalCreateQuestionnaireSelect.classList.remove('active');
     });
     document.getElementById('btn-cancel-select-template').addEventListener('click', () => {
-        modalCreateQuestionnaireSelect.style.display = 'none';
+        modalCreateQuestionnaireSelect.classList.remove('active');
+    });
+
+    // Gérer la sélection visuelle des modèles
+    document.querySelectorAll('.template-option').forEach(opt => {
+        opt.addEventListener('click', () => {
+            document.querySelectorAll('.template-option').forEach(o => o.classList.remove('active'));
+            opt.classList.add('active');
+            const radio = opt.querySelector('input[type="radio"]');
+            if (radio) radio.checked = true;
+        });
     });
     
     // Créer à partir d'un template
@@ -1074,7 +1092,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 })
             });
             if (res.success) {
-                modalCreateQuestionnaireSelect.style.display = 'none';
+                modalCreateQuestionnaireSelect.classList.remove('active');
                 showToast("Questionnaire créé avec succès !", "success");
                 loadQuestionnairesList();
                 openVisualBuilder(res.questionnaire.id);
@@ -1752,11 +1770,11 @@ document.addEventListener('DOMContentLoaded', () => {
     
     btnTriggerAiBuilder.addEventListener('click', () => {
         document.getElementById('ai-quest-prompt-input').value = '';
-        modalAiAssistantQuest.style.display = 'flex';
+        modalAiAssistantQuest.classList.add('active');
     });
     
-    document.getElementById('btn-close-ai-quest-modal').addEventListener('click', () => modalAiAssistantQuest.style.display = 'none');
-    document.getElementById('btn-cancel-ai-quest').addEventListener('click', () => modalAiAssistantQuest.style.display = 'none');
+    document.getElementById('btn-close-ai-quest-modal').addEventListener('click', () => modalAiAssistantQuest.classList.remove('active'));
+    document.getElementById('btn-cancel-ai-quest').addEventListener('click', () => modalAiAssistantQuest.classList.remove('active'));
     
     document.getElementById('btn-submit-ai-quest').addEventListener('click', async () => {
         const prompt = document.getElementById('ai-quest-prompt-input').value;
@@ -1781,7 +1799,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     })
                 });
                 if (confirmRes.success) {
-                    modalAiAssistantQuest.style.display = 'none';
+                    modalAiAssistantQuest.classList.remove('active');
                     showToast("Questionnaire généré par l'IA avec succès !", "success");
                     loadQuestionnairesList();
                     openVisualBuilder(confirmRes.questionnaire.id);
@@ -1807,11 +1825,11 @@ document.addEventListener('DOMContentLoaded', () => {
         btnConfirmImportQuest.disabled = true;
         document.getElementById('import-preview-results').style.display = 'none';
         document.getElementById('import-file-label').innerHTML = 'Glissez-déposez votre document ici ou <span class="file-browse-btn">parcourez</span>';
-        modalImportQuestionnaire.style.display = 'flex';
+        modalImportQuestionnaire.classList.add('active');
     });
     
-    document.getElementById('btn-close-import-modal').addEventListener('click', () => modalImportQuestionnaire.style.display = 'none');
-    document.getElementById('btn-cancel-import-quest').addEventListener('click', () => modalImportQuestionnaire.style.display = 'none');
+    document.getElementById('btn-close-import-modal').addEventListener('click', () => modalImportQuestionnaire.classList.remove('active'));
+    document.getElementById('btn-cancel-import-quest').addEventListener('click', () => modalImportQuestionnaire.classList.remove('active'));
     
     importFileDropArea.addEventListener('click', () => importFileInput.click());
     
@@ -1883,7 +1901,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 })
             });
             if (res.success) {
-                modalImportQuestionnaire.style.display = 'none';
+                modalImportQuestionnaire.classList.remove('active');
                 showToast("Questionnaire importé avec succès !", "success");
                 loadQuestionnairesList();
                 openVisualBuilder(res.questionnaire.id);
