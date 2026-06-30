@@ -1877,10 +1877,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     async function handleImportFile(file) {
+        console.log("handleImportFile appelé pour :", file.name, "Taille:", file.size);
         document.getElementById('import-file-label').innerText = `Fichier sélectionné : ${file.name}`;
         
         const loader = document.getElementById('import-analysis-loader');
         loader.style.display = 'block';
+        document.getElementById('import-preview-results').style.display = 'none';
+        btnConfirmImportQuest.disabled = true;
         
         const formData = new FormData();
         formData.append('file', file);
@@ -1890,7 +1893,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 method: 'POST',
                 body: formData
             });
-            if (res.success) {
+            console.log("Réponse de l'API d'import :", res);
+            
+            if (res && res.success) {
                 importedStructure = res.structure;
                 
                 const previewBox = document.getElementById('import-preview-box-content');
@@ -1903,10 +1908,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
                 document.getElementById('import-preview-results').style.display = 'block';
                 btnConfirmImportQuest.disabled = false;
-                showToast("Fichier analysé avec succès par l'IA !", "success");
+                showToast("Fichier analysé avec succès !", "success");
+            } else {
+                showToast(res.message || "Erreur de traitement lors de l'analyse du fichier.", "error");
             }
         } catch (err) {
             console.error("Erreur lors de l'import:", err);
+            showToast(`Impossible d'importer le fichier : ${err.message}`, "error");
         } finally {
             loader.style.display = 'none';
         }
