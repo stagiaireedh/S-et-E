@@ -1345,6 +1345,55 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     </div>
                 `;
+            } else if (block.block_type === 'checkbox') {
+                const options = content.options || [];
+                const optionsHtml = options.map(opt => `
+                    <div style="display:flex; align-items:center; gap:6px; font-size:12.5px; margin-top:4px;">
+                        <input type="checkbox" disabled> <span>${opt}</span>
+                    </div>
+                `).join('') || '<p class="text-muted small mb-0" style="font-size:11px;">Aucune option définie (définissez-les dans le panneau de droite)</p>';
+                innerContentHtml = `
+                    <div class="block-render-generic">
+                        <div class="d-flex align-items-center gap-2">
+                            <span>☑️</span>
+                            <span class="editable-canvas-text font-weight-bold" data-prop="label" contenteditable="true" style="font-size:13.5px; outline:none; border-bottom:1px dashed transparent;">${content.label || 'Liste de contrôle'}</span>
+                        </div>
+                        <div style="margin-top: 8px; padding-left: 8px;">
+                            ${optionsHtml}
+                        </div>
+                    </div>
+                `;
+            } else if (block.block_type === 'matrix') {
+                const rows = content.rows || [];
+                const cols = content.columns || [];
+                
+                const headerHtml = `
+                    <tr>
+                        <th style="padding:6px; border:1px solid var(--border-color); background:rgba(255,255,255,0.03); font-size:11px;">Questions / Critères</th>
+                        ${cols.map(c => `<th style="padding:6px; border:1px solid var(--border-color); background:rgba(255,255,255,0.03); font-size:11px; text-align:center;">${c}</th>`).join('')}
+                    </tr>
+                `;
+                const rowsHtml = rows.map(r => `
+                    <tr>
+                        <td style="padding:6px; border:1px solid var(--border-color); font-size:11.5px; font-weight:600;">${r}</td>
+                        ${cols.map(() => `<td style="padding:6px; border:1px solid var(--border-color); text-align:center;"><input type="radio" disabled></td>`).join('')}
+                    </tr>
+                `).join('') || '<tr><td colspan="100%" class="text-muted small text-center p-2" style="font-size:11px;">Définissez des lignes et colonnes dans le panneau de droite</td></tr>';
+                
+                innerContentHtml = `
+                    <div class="block-render-generic">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <span>📊</span>
+                            <span class="editable-canvas-text font-weight-bold" data-prop="label" contenteditable="true" style="font-size:13.5px; outline:none; border-bottom:1px dashed transparent;">${content.label || 'Grille d\'évaluation'}</span>
+                        </div>
+                        <div style="overflow-x:auto;">
+                            <table style="width:100%; border-collapse:collapse; text-align:left; border:1px solid var(--border-color);">
+                                <thead>${headerHtml}</thead>
+                                <tbody>${rowsHtml}</tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
             } else {
                 const label = content.label || block.block_type.toUpperCase();
                 const icon = getBlockIcon(block.block_type);
@@ -1475,6 +1524,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             builderBlocks.forEach((b, i) => b.order_index = i + 1);
                             renderCanvasBlocks();
                             selectCanvasBlock(res.block.id);
+                            
+                            await requestAPI(`/api/questionnaires/${activeBuilderQuestionnaireId}/blocks/reorder`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ blocks: builderBlocks.map(b => ({ id: b.id, order_index: b.order_index })) })
+                            });
                         }
                     } catch (err) {
                         console.error("Erreur drop de bibliothèque:", err);
@@ -1590,6 +1645,32 @@ document.addEventListener('DOMContentLoaded', () => {
                     <label class="form-check-label" for="prop-q-required">Obligatoire</label>
                 </div>
             `;
+        } else if (block.block_type === 'checkbox') {
+            fieldsHtml = `
+                <div class="property-group">
+                    <label>Libellé du champ</label>
+                    <input type="text" id="prop-generic-label" class="form-control" value="${content.label || 'Liste de contrôle'}">
+                </div>
+                <div class="property-group">
+                    <label>Options de la checklist (séparées par des virgules)</label>
+                    <input type="text" id="prop-checkbox-options" class="form-control" value="${(content.options || []).join(', ')}">
+                </div>
+            `;
+        } else if (block.block_type === 'matrix') {
+            fieldsHtml = `
+                <div class="property-group">
+                    <label>Libellé du champ</label>
+                    <input type="text" id="prop-generic-label" class="form-control" value="${content.label || 'Grille d\'évaluation'}">
+                </div>
+                <div class="property-group">
+                    <label>Lignes de la grille (séparées par des virgules)</label>
+                    <textarea id="prop-matrix-rows" class="form-control" rows="3">${(content.rows || []).join(', ')}</textarea>
+                </div>
+                <div class="property-group">
+                    <label>Colonnes de la grille (séparées par des virgules)</label>
+                    <input type="text" id="prop-matrix-cols" class="form-control" value="${(content.columns || []).join(', ')}">
+                </div>
+            `;
         } else {
             fieldsHtml = `
                 <div class="property-group">
@@ -1672,6 +1753,52 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 }, 400));
             }
+        } else if (block.block_type === 'checkbox') {
+            bindInput('prop-generic-label', 'label', el => el.value);
+            
+            const optionsEl = document.getElementById('prop-checkbox-options');
+            if (optionsEl) {
+                optionsEl.addEventListener('input', debounce(async () => {
+                    const list = optionsEl.value.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                    block.content.options = list;
+                    renderCanvasBlocks();
+                    await requestAPI(`/api/blocks/${block.id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: block.content })
+                    });
+                }, 400));
+            }
+        } else if (block.block_type === 'matrix') {
+            bindInput('prop-generic-label', 'label', el => el.value);
+            
+            const rowsEl = document.getElementById('prop-matrix-rows');
+            if (rowsEl) {
+                rowsEl.addEventListener('input', debounce(async () => {
+                    const list = rowsEl.value.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                    block.content.rows = list;
+                    renderCanvasBlocks();
+                    await requestAPI(`/api/blocks/${block.id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: block.content })
+                    });
+                }, 400));
+            }
+            
+            const colsEl = document.getElementById('prop-matrix-cols');
+            if (colsEl) {
+                colsEl.addEventListener('input', debounce(async () => {
+                    const list = colsEl.value.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                    block.content.columns = list;
+                    renderCanvasBlocks();
+                    await requestAPI(`/api/blocks/${block.id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: block.content })
+                    });
+                }, 400));
+            }
         } else {
             bindInput('prop-generic-label', 'label', el => el.value);
             bindInput('prop-generic-help', 'help_text', el => el.value);
@@ -1704,6 +1831,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderCanvasBlocks();
                 selectCanvasBlock(res.block.id);
                 showToast("Bloc dupliqué !", "success");
+                
+                await requestAPI(`/api/questionnaires/${activeBuilderQuestionnaireId}/blocks/reorder`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ blocks: builderBlocks.map(b => ({ id: b.id, order_index: b.order_index })) })
+                });
             }
         } catch (err) {
             console.error("Erreur duplication bloc:", err);
@@ -1723,6 +1856,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         propertiesPanelContent.innerHTML = '<p class="text-muted text-center py-5">Sélectionnez un bloc sur le canvas pour modifier ses propriétés.</p>';
                     }
                     showToast("Bloc supprimé avec succès !", "success");
+                    
+                    await requestAPI(`/api/questionnaires/${activeBuilderQuestionnaireId}/blocks/reorder`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ blocks: builderBlocks.map(b => ({ id: b.id, order_index: b.order_index })) })
+                    });
                 }
             } catch (err) {
                 console.error("Erreur suppression bloc:", err);
@@ -2452,6 +2591,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 const inputEl = formInterviewSaisie.querySelector(`[name="q_${ans.question_id}"]`);
                 if (inputEl) {
                     inputEl.value = ans.answer_text;
+                } else {
+                    // Essayer de trouver des checkboxes pour ce bloc
+                    const checkboxes = formInterviewSaisie.querySelectorAll(`[name^="q_${ans.question_id}_opt_"]`);
+                    if (checkboxes.length > 0) {
+                        const checkedOpts = ans.answer_text.split(',').map(s => s.trim());
+                        checkboxes.forEach(cb => {
+                            cb.checked = checkedOpts.includes(cb.value);
+                        });
+                    } else {
+                        // Essayer de trouver des radios pour ce bloc (matrice)
+                        const radios = formInterviewSaisie.querySelectorAll(`[name^="q_${ans.question_id}_row_"]`);
+                        if (radios.length > 0) {
+                            const rowVals = ans.answer_text.split(' | ').map(item => {
+                                const parts = item.split(': ');
+                                return { row: parts[0], val: parts[1] };
+                            });
+                            
+                            // Trouver le bloc dans le questionnaire pour mapper l'index de ligne
+                            const blockId = ans.question_id.replace('block_', '');
+                            const block = quest.blocks.find(b => b.id == blockId);
+                            if (block && block.content && block.content.rows) {
+                                block.content.rows.forEach((rowName, rIdx) => {
+                                    const match = rowVals.find(rv => rv.row === rowName);
+                                    if (match) {
+                                        const radio = formInterviewSaisie.querySelector(`[name="q_${ans.question_id}_row_${rIdx}"][value="${match.val}"]`);
+                                        if (radio) radio.checked = true;
+                                    }
+                                });
+                            }
+                        }
+                    }
                 }
             });
             

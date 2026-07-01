@@ -105,6 +105,30 @@ def export_to_word(questionnaire):
             for o in opts:
                 cp = doc.add_paragraph(f"  [ ] {o}")
                 cp.paragraph_format.left_indent = Inches(0.4)
+        elif b.block_type == 'matrix':
+            label = b.content.get('label', 'Grille d\'évaluation')
+            rows = b.content.get('rows', [])
+            cols = b.content.get('columns', [])
+            p = doc.add_paragraph()
+            p.add_run(f"📊 {label}").bold = True
+            
+            # Créer un tableau dans Word
+            table = doc.add_table(rows=len(rows) + 1, cols=len(cols) + 1)
+            table.style = 'Table Grid'
+            
+            # En-tête
+            hdr_cells = table.rows[0].cells
+            hdr_cells[0].text = "Critères"
+            for c_idx, col in enumerate(cols):
+                hdr_cells[c_idx + 1].text = col
+                
+            # Lignes
+            for r_idx, row in enumerate(rows):
+                row_cells = table.rows[r_idx + 1].cells
+                row_cells[0].text = row
+                for c_idx in range(len(cols)):
+                    row_cells[c_idx + 1].text = "[ ]"
+            doc.add_paragraph() # Espaceur
         elif b.block_type == 'comment':
             p = doc.add_paragraph()
             p.add_run("💬 Commentaires libres :").bold = True
@@ -155,6 +179,10 @@ def export_to_excel(questionnaire):
         elif b.block_type == 'checkbox':
             opts = ", ".join(b.content.get('options', []))
             ws.append([idx, "Checklist", b.content.get('label', ''), opts, "", ""])
+        elif b.block_type == 'matrix':
+            rows_str = ", ".join(b.content.get('rows', []))
+            cols_str = ", ".join(b.content.get('columns', []))
+            ws.append([idx, "Grille d'évaluation", b.content.get('label', ''), f"Lignes: {rows_str} | Colonnes: {cols_str}", "", ""])
         else:
             ws.append([idx, b.block_type.upper(), b.content.get('label', ''), "", "", b.content.get('help_text', '')])
         idx += 1
@@ -252,9 +280,28 @@ def export_to_pdf(questionnaire):
             pdf.set_font('helvetica', 'B', 11)
             pdf.cell(0, 6, f"☑️ {label}", 0, 1, 'L')
             pdf.set_font('helvetica', '', 10)
+            pdf.set_text_color(80, 80, 80)
             for o in opts:
                 pdf.cell(10)
                 pdf.cell(0, 6, f"[ ] {o}", 0, 1, 'L')
             pdf.ln(4)
+        elif b.block_type == 'matrix':
+            label = b.content.get('label', 'Grille d\'évaluation')
+            rows = b.content.get('rows', [])
+            cols = b.content.get('columns', [])
+            pdf.set_font('helvetica', 'B', 11)
+            pdf.cell(0, 6, f"📊 {label}", 0, 1, 'L')
+            pdf.set_font('helvetica', '', 10)
+            pdf.set_text_color(80, 80, 80)
+            for r in rows:
+                pdf.cell(5)
+                pdf.cell(0, 6, f"- {r} :", 0, 1, 'L')
+                pdf.cell(10)
+                pdf.cell(0, 6, " | ".join([f"[ ] {c}" for c in cols]), 0, 1, 'L')
+            pdf.ln(4)
+        elif b.block_type == 'comment':
+            pdf.set_font('helvetica', 'B', 11)
+            pdf.cell(0, 6, "💬 Commentaires libres :", 0, 1, 'L')
+            pdf.ln(15)
             
     return pdf.output()
