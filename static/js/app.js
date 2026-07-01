@@ -2049,6 +2049,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     body: JSON.stringify({ blocks: builderBlocks.map(b => ({ id: b.id, order_index: b.order_index })) })
                 });
             }
+        }
     });
 
     document.getElementById('btn-canvas-add-block-bottom').addEventListener('click', async () => {
