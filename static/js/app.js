@@ -432,11 +432,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     let individualScore = 0;
                     if (s.answers.length > 0) {
+                        const positives = ['bon', 'bonne', 'excellent', 'excellente', 'satisfait', 'satisfaite', 'très bien', 'bien', 'progrès', 'amélioration', 'réussite', 'facile', 'rapide', 'utile', 'efficace', 'merci', 'positif', 'positive', 'avantage', 'parfait', 'parfaite', 'réussi', 'réussie', 'super', 'génial', 'résolu', 'bénéfique', 'favorable', 'soutien', 'aide', 'renforcement'];
+                        const negatives = ['mauvais', 'mauvaise', 'difficile', 'problème', 'panne', 'retard', 'lent', 'inutile', 'inefficace', 'mécontent', 'mécontente', 'compliqué', 'compliquée', 'souci', 'bloqué', 'bloquée', 'erreur', 'échoué', 'échec', 'insuffisant', 'insuffisante', 'manque', 'absent', 'absence', 'défaillance', 'rupture', 'faiblesse', 'critique', 'préoccupant'];
                         const scoreSum = s.answers.reduce((acc, a) => {
                             const txt = a.answer_text.toLowerCase();
-                            if (txt.includes('panne') || txt.includes('difficile') || txt.includes('problème') || txt.includes('défaut')) return acc - 0.5;
-                            if (txt.includes('bon') || txt.includes('excellent') || txt.includes('très bien') || txt.includes('satisfait')) return acc + 0.5;
-                            return acc;
+                            let change = 0;
+                            negatives.forEach(w => { if (txt.includes(w)) change -= 0.5; });
+                            positives.forEach(w => { if (txt.includes(w)) change += 0.5; });
+                            return acc + change;
                         }, 0);
                         individualScore = scoreSum / s.answers.length;
                     }
@@ -560,11 +563,14 @@ document.addEventListener('DOMContentLoaded', () => {
             
             let score = 0;
             if (s.answers.length > 0) {
+                const positives = ['bon', 'bonne', 'excellent', 'excellente', 'satisfait', 'satisfaite', 'très bien', 'bien', 'progrès', 'amélioration', 'réussite', 'facile', 'rapide', 'utile', 'efficace', 'merci', 'positif', 'positive', 'avantage', 'parfait', 'parfaite', 'réussi', 'réussie', 'super', 'génial', 'résolu', 'bénéfique', 'favorable', 'soutien', 'aide', 'renforcement'];
+                const negatives = ['mauvais', 'mauvaise', 'difficile', 'problème', 'panne', 'retard', 'lent', 'inutile', 'inefficace', 'mécontent', 'mécontente', 'compliqué', 'compliquée', 'souci', 'bloqué', 'bloquée', 'erreur', 'échoué', 'échec', 'insuffisant', 'insuffisante', 'manque', 'absent', 'absence', 'défaillance', 'rupture', 'faiblesse', 'critique', 'préoccupant'];
                 const scoreSum = s.answers.reduce((acc, a) => {
                     const txt = a.answer_text.toLowerCase();
-                    if (txt.includes('panne') || txt.includes('difficile') || txt.includes('problème') || txt.includes('défaut')) return acc - 0.5;
-                    if (txt.includes('bon') || txt.includes('excellent') || txt.includes('très bien') || txt.includes('satisfait')) return acc + 0.5;
-                    return acc;
+                    let change = 0;
+                    negatives.forEach(w => { if (txt.includes(w)) change -= 0.5; });
+                    positives.forEach(w => { if (txt.includes(w)) change += 0.5; });
+                    return acc + change;
                 }, 0);
                 score = scoreSum / s.answers.length;
             }
