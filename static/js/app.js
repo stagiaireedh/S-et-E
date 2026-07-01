@@ -1121,7 +1121,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 const btnCancelEdit = document.getElementById('btn-cancel-edit-session');
                 if (btnCancelEdit) btnCancelEdit.remove();
-                document.querySelector('#tab-collecte h2').innerText = "Saisie Individuelle & Collective";
+                document.querySelector('.form-saisie-card h3').innerText = "Saisie Manuelle d'Entretien";
                 
                 const btnShare = document.getElementById('btn-share-questionnaire');
                 if (btnShare) btnShare.style.display = 'none';
@@ -2424,7 +2424,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
             
-            document.querySelector('#tab-collecte h2').innerText = "Modifier l'Entretien";
+            document.querySelector('.form-saisie-card h3').innerText = "Modifier l'Entretien";
             btnSubmitSaisie.innerText = "Mettre à jour l'Entretien";
             btnSubmitSaisie.classList.add('btn-warning');
             
@@ -2462,7 +2462,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const btnCancelEdit = document.getElementById('btn-cancel-edit-session');
         if (btnCancelEdit) btnCancelEdit.remove();
         
-        document.querySelector('#tab-collecte h2').innerText = "Saisie Individuelle & Collective";
+        document.querySelector('.form-saisie-card h3').innerText = "Saisie Manuelle d'Entretien";
         switchTab('dashboard');
         showToast("Modification annulée.", "info");
     }
@@ -2766,9 +2766,12 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('user-display-name').innerText = user.username;
         document.getElementById('user-display-email').innerText = user.email;
         
-        // Charger les projets de l'utilisateur
+        // Charger les projets de l'utilisateur et forcer le rafraîchissement de l'onglet actif (évite les bugs au F5)
         loadProjects(true).then(() => {
-            loadDashboardData();
+            const activeTab = document.querySelector('.nav-item.active') ? 
+                              document.querySelector('.nav-item.active').getAttribute('data-tab') : 
+                              'dashboard';
+            switchTab(activeTab);
         });
     }
 
