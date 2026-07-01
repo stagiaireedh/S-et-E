@@ -2315,5 +2315,9 @@ body.light-theme .library-saved-blocks {
     border-color: rgba(0, 0, 0, 0.05);
 }
 
-
-
+/* Désactiver les pointer-events sur les champs désactivés du canvas pour permettre le clic de sélection du bloc */
+.builder-block input,
+.builder-block textarea,
+.builder-block select {
+    pointer-events: none;
+}

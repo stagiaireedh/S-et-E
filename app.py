@@ -11,6 +11,46 @@ from models import db, User, Project, Questionnaire, Question, InterviewSession,
 from ai_service import run_project_triangulation, chat_assistant_respond
 from pdf_service import generate_global_evaluation_pdf, generate_session_summary_pdf
 
+def get_or_create_question_id(q_id_str, questionnaire_id):
+    """
+    Récupère ou crée dynamiquement l'ID entier de la Question 
+    pour éviter les plantages si l'identifiant envoyé est de la forme 'block_XXX'.
+    """
+    try:
+        return int(q_id_str)
+    except ValueError:
+        if q_id_str.startswith('block_'):
+            try:
+                block_id = int(q_id_str.replace('block_', ''))
+                block = QuestionnaireBlock.query.get(block_id)
+                if block and block.block_type == 'question':
+                    q_id = block.content.get('question_id')
+                    if q_id:
+                        q_exists = Question.query.get(q_id)
+                        if q_exists:
+                            return q_exists.id
+                            
+                    # Création dynamique de la question manquante
+                    q_entry = Question(
+                        questionnaire_id=questionnaire_id,
+                        text=block.content.get('label', 'Question'),
+                        question_type=block.content.get('question_type', 'text'),
+                        choices=",".join(block.content.get('choices', [])) if isinstance(block.content.get('choices'), list) else "",
+                        order_num=block.order_index,
+                        is_required=block.content.get('is_required', False),
+                        help_text=block.content.get('help_text', '')
+                    )
+                    db.session.add(q_entry)
+                    db.session.flush()
+                    
+                    new_content = dict(block.content)
+                    new_content['question_id'] = q_entry.id
+                    block.content = new_content
+                    return q_entry.id
+            except Exception:
+                pass
+    return None
+
 def create_app():
     """Initialise et configure l'application Flask."""
     app = Flask(__name__)
@@ -405,12 +445,14 @@ def create_app():
         answers = data.get('answers', {})
         for q_id, ans_text in answers.items():
             if ans_text and str(ans_text).strip():
-                answer = Answer(
-                    session_id=session.id,
-                    question_id=int(q_id),
-                    answer_text=str(ans_text)
-                )
-                db.session.add(answer)
+                q_id_int = get_or_create_question_id(q_id, quest_id)
+                if q_id_int is not None:
+                    answer = Answer(
+                        session_id=session.id,
+                        question_id=q_id_int,
+                        answer_text=str(ans_text)
+                    )
+                    db.session.add(answer)
                 
         db.session.commit()
         return jsonify({'success': True, 'session': session.to_dict()}), 201
@@ -458,12 +500,14 @@ def create_app():
         answers = data.get('answers', {})
         for q_id, ans_text in answers.items():
             if ans_text and str(ans_text).strip():
-                answer = Answer(
-                    session_id=session.id,
-                    question_id=int(q_id),
-                    answer_text=str(ans_text)
-                )
-                db.session.add(answer)
+                q_id_int = get_or_create_question_id(q_id, session.questionnaire_id)
+                if q_id_int is not None:
+                    answer = Answer(
+                        session_id=session.id,
+                        question_id=q_id_int,
+                        answer_text=str(ans_text)
+                    )
+                    db.session.add(answer)
                 
         db.session.commit()
         return jsonify({'success': True, 'session': session.to_dict()})
@@ -1104,11 +1148,28 @@ def create_app():
         
         blocks = structure.get('blocks', [])
         for idx, b in enumerate(blocks):
+            b_type = b.get('block_type', 'text')
+            b_content = dict(b.get('content', {}))
+            
+            if b_type == 'question':
+                q_entry = Question(
+                    questionnaire_id=quest.id,
+                    text=b_content.get('label', 'Question sans titre'),
+                    question_type=b_content.get('question_type', 'text'),
+                    choices=",".join(b_content.get('choices', [])) if isinstance(b_content.get('choices'), list) else "",
+                    order_num=idx,
+                    is_required=b_content.get('is_required', False),
+                    help_text=b_content.get('help_text', '')
+                )
+                db.session.add(q_entry)
+                db.session.flush()
+                b_content['question_id'] = q_entry.id
+                
             block = QuestionnaireBlock(
                 questionnaire_id=quest.id,
-                block_type=b['block_type'],
+                block_type=b_type,
                 order_index=idx,
-                content=b.get('content', {})
+                content=b_content
             )
             db.session.add(block)
             
