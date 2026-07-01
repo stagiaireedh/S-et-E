@@ -69,11 +69,16 @@ def create_app():
     # Initialisation de la base de données avec l'application Flask
     db.init_app(app)
     
-    # Protection pour Vercel / Render : Forcer la désactivation de l'IA réelle si dans le cloud
+    # Activation de l'IA réelle dans le cloud si au moins une clé API est fournie
     if os.environ.get('VERCEL_ENV') or os.environ.get('RENDER'):
         import ai_service
-        ai_service.ai_client = None
-        app.logger.info("Environnement Cloud (Vercel/Render) détecté. Mode Simulation IA activé d'office.")
+        if not (os.environ.get('GEMINI_API_KEY') or os.environ.get('GROQ_API_KEY') or os.environ.get('GITHUB_TOKEN')):
+            ai_service.ai_client = None
+            app.logger.info("Environnement Cloud détecté sans clés API. Mode Simulation IA activé.")
+        else:
+            from ia_cascade import IACascade
+            ai_service.ai_client = IACascade()
+            app.logger.info("Environnement Cloud détecté avec clés API. Mode IA réelle activé.")
 
     # Création du dossier d'upload s'il n'existe pas
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
@@ -590,6 +595,62 @@ def create_app():
         db.session.delete(session)
         db.session.commit()
         return jsonify({'success': True, 'message': 'Entretien supprimé.'})
+
+    @app.route('/api/questions/<int:question_id>/synthesis', methods=['GET'])
+    @login_required
+    def get_question_synthesis(question_id):
+        """Génère une synthèse IA (RAG local ou réel) des réponses de tous les acteurs pour une question donnée."""
+        question = Question.query.get_or_404(question_id)
+        if question.questionnaire.project.user_id != current_user.id:
+            return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
+            
+        answers = Answer.query.filter_by(question_id=question_id).all()
+        if not answers:
+            return jsonify({'success': True, 'synthesis': "Aucune réponse n'a encore été enregistrée pour cette question."})
+            
+        # Regrouper les réponses par catégorie d'acteur
+        grouped_answers = {}
+        for ans in answers:
+            actor = ans.session.actor_category
+            if actor not in grouped_answers:
+                grouped_answers[actor] = []
+            grouped_answers[actor].append(ans.answer_text)
+            
+        # Tenter d'utiliser la cascade d'IA
+        from ai_service import ai_client
+        if ai_client:
+            try:
+                corpus = f"Question : \"{question.text}\"\n\nRéponses recueillies auprès des différentes catégories d'acteurs :\n"
+                for actor, texts in grouped_answers.items():
+                    corpus += f"--- Catégorie : {actor} ---\n"
+                    for idx, t in enumerate(texts, 1):
+                        corpus += f"Réponse {idx} : \"{t}\"\n"
+                    corpus += "\n"
+                    
+                system_prompt = (
+                    "Tu es un expert analyste de données de Suivi-Évaluation (M&E). "
+                    "Ta tâche est de lire le corpus de réponses fourni pour cette question et d'en faire "
+                    "un résumé synthétique, clair et actionnable (maximum 3 à 4 phrases). "
+                    "Souligne les points de convergence et de divergence entre les catégories d'acteurs. "
+                    "Réponds obligatoirement en français sous forme de texte brut."
+                )
+                
+                synthesis = ai_client.generate(system_prompt, corpus)
+                if synthesis:
+                    return jsonify({'success': True, 'synthesis': synthesis.strip()})
+            except Exception as e:
+                app.logger.warning(f"Échec de génération de la synthèse de question par IA : {e}")
+                
+        # Repli local analytique de base (Simulation)
+        summary_parts = []
+        for actor, texts in grouped_answers.items():
+            if len(texts) == 1:
+                summary_parts.append(f"La catégorie **{actor}** signale : « {texts[0]} »")
+            else:
+                summary_parts.append(f"Les représentants de la catégorie **{actor}** s'accordent sur le point suivant : « {texts[0]} » (sur {len(texts)} témoignages).")
+                
+        synthesis = " <br> ".join(summary_parts)
+        return jsonify({'success': True, 'synthesis': f"<strong>Synthèse analytique locale :</strong><br>{synthesis}"})
 
     # --- API IMPORT DE PIÈCES JOINTES ---
     @app.route('/api/projects/<int:project_id>/attachments', methods=['POST'])

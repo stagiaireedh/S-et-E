@@ -267,49 +267,148 @@ def _local_run_project_triangulation(project_id, sessions, verbatims_by_actor, a
             'count': data['count']
         }
         
+    # 1. Extraction des thèmes locaux
     combined_text = " ".join(all_comments)
     themes = _local_extract_themes(combined_text)
     
-    # Risques locaux
+    # 2. Construction dynamique des Risques
     risks = []
-    added_titles = set()
-    for candidate in risks_candidates:
-        words_found = [w for w in POSSIBLE_NEGATIVES if w in candidate['text'].lower()]
-        title = f"Difficulté concernant : {words_found[0].capitalize()}" if words_found else "Difficulté générale"
-        if title not in added_titles and len(risks) < 4:
-            added_titles.add(title)
+    added_sentences = set()
+    for comment in all_comments:
+        sentences = re.split(r'[.!?]\s*', comment)
+        for sent in sentences:
+            sent_clean = sent.strip()
+            if len(sent_clean) > 20 and sent_clean.lower() not in added_sentences:
+                # Mots clés de problèmes
+                keywords = ['problème', 'difficulté', 'manque', 'retard', 'lent', 'compliqué', 'absent', 'insuffisant', 'mauvais', 'échoué', 'faiblesse', 'critique', 'dysfonctionnement', 'faute']
+                if any(kw in sent_clean.lower() for kw in keywords):
+                    added_sentences.add(sent_clean.lower())
+                    # Trouver l'acteur et le titre pour ce commentaire
+                    actor_role = "Bénéficiaire"
+                    session_title = "Entretien"
+                    for s in sessions:
+                        for ans in s.answers:
+                            if ans.answer_text == comment:
+                                actor_role = s.actor_category
+                                session_title = s.title
+                                break
+                    risks.append({
+                        'title': f"Difficulté signalée : {sent_clean[:35]}...",
+                        'description': sent_clean,
+                        'source': f"{actor_role} ({session_title})"
+                    })
+                    if len(risks) >= 3:
+                        break
+        if len(risks) >= 3:
+            break
+            
+    # Fallback si aucun risque extrait
+    if not risks:
+        from models import Project
+        project = Project.query.get(project_id)
+        proj_name = project.name.lower() if project else ""
+        
+        if any(k in proj_name for k in ['éduc', 'scol', 'enseig', 'élèv', 'appren', 'redevabilité']):
             risks.append({
-                'title': title,
-                'description': candidate['text'],
-                'source': f"{candidate['actor']} ({candidate['session']})"
+                'title': "Risque d'absentéisme des acteurs clés",
+                'description': "Faiblesse de participation ou de suivi régulier par manque d'animation ou de ressources.",
+                'source': "Analyse thématique locale"
+            })
+            risks.append({
+                'title': "Déficit de redevabilité ou de communication",
+                'description': "Manque de canaux transparents pour remonter les réclamations ou partager les décisions.",
+                'source': "Analyse thématique locale"
+            })
+        elif any(k in proj_name for k in ['sant', 'médic', 'clin', 'soin']):
+            risks.append({
+                'title': "Rupture de stock ou logistique",
+                'description': "Risque de retard d'approvisionnement en fournitures ou outils de travail.",
+                'source': "Analyse thématique locale"
+            })
+            risks.append({
+                'title': "Surcharge des équipes de terrain",
+                'description': "Risque d'épuisement ou de baisse de qualité de l'accompagnement par manque d'effectif.",
+                'source': "Analyse thématique locale"
+            })
+        else:
+            risks.append({
+                'title': "Retard dans le calendrier des activités",
+                'description': "Risque de décalage dans la mise en œuvre opérationnelle des jalons clés du projet.",
+                'source': "Analyse thématique locale"
+            })
+            risks.append({
+                'title': "Faible engagement communautaire",
+                'description': "Risque de sous-utilisation des services ou de manque d'appropriation locale par les bénéficiaires.",
+                'source': "Analyse thématique locale"
             })
             
-    if not risks:
-        risks.append({
-            'title': "Faiblesse de maintenance",
-            'description': "Possibilité de pannes non résolues par manque de techniciens formés.",
-            'source': "Simulation locale"
-        })
-        
-    # Recommandations locales
+    # 3. Construction dynamique des Recommandations
     recommendations = []
-    theme_names = [t['theme'] for t in themes]
-    if 'Maintenance & Technique' in theme_names:
-        recommendations.append({
-            'title': "Mettre en place un plan de maintenance préventive",
-            'description': "Former des techniciens locaux et équiper le comité d'une boîte à outils.",
-            'priority': "Haute"
-        })
-    if 'Aspect Financier' in theme_names:
-        recommendations.append({
-            'title': "Réviser le mécanisme de cotisation",
-            'description': "Ajuster la participation forfaitaire aux revenus réels des familles.",
-            'priority': "Moyenne"
-        })
+    added_rec_sentences = set()
+    for comment in all_comments:
+        sentences = re.split(r'[.!?]\s*', comment)
+        for sent in sentences:
+            sent_clean = sent.strip()
+            if len(sent_clean) > 20 and sent_clean.lower() not in added_rec_sentences:
+                # Mots clés de suggestion/recommandation
+                keywords = ['il faut', 'devrait', 'suggère', 'recommande', 'besoin', 'nécessaire', 'améliorer', 'renforcer', 'former', 'sensibiliser', 'devoir']
+                if any(kw in sent_clean.lower() for kw in keywords):
+                    added_rec_sentences.add(sent_clean.lower())
+                    recommendations.append({
+                        'title': f"Action recommandée : {sent_clean[:35]}...",
+                        'description': sent_clean,
+                        'priority': 'Haute' if any(kw in sent_clean.lower() for kw in ['urgent', 'impératif', 'faut', 'nécessaire']) else 'Moyenne'
+                    })
+                    if len(recommendations) >= 3:
+                        break
+        if len(recommendations) >= 3:
+            break
+            
+    # Fallback si aucune recommandation extraite
+    if not recommendations:
+        from models import Project
+        project = Project.query.get(project_id)
+        proj_name = project.name.lower() if project else ""
+        
+        if any(k in proj_name for k in ['éduc', 'scol', 'enseig', 'élèv', 'appren', 'redevabilité']):
+            recommendations.append({
+                'title': "Renforcer les mécanismes de redevabilité",
+                'description': "Instaurer des comités de suivi transparents et inclusifs impliquant les parents et le personnel.",
+                'priority': "Haute"
+            })
+            recommendations.append({
+                'title': "Former en continu les animateurs et encadrants",
+                'description': "Organiser des ateliers périodiques de renforcement des compétences et d'auto-évaluation.",
+                'priority': "Moyenne"
+            })
+        elif any(k in proj_name for k in ['sant', 'médic', 'clin', 'soin']):
+            recommendations.append({
+                'title': "Sécuriser l'accès aux intrants de base",
+                'description': "Instaurer un inventaire hebdomadaire et des alertes automatiques de seuil critique.",
+                'priority': "Haute"
+            })
+            recommendations.append({
+                'title': "Renforcer la communication communautaire",
+                'description': "Planifier des campagnes d'information régulières pour inciter à l'utilisation des services.",
+                'priority': "Moyenne"
+            })
+        else:
+            recommendations.append({
+                'title': "Mettre en place un calendrier de suivi de proximité",
+                'description': "Planifier des visites régulières de l'équipe projet sur le terrain pour accompagner les acteurs.",
+                'priority': "Haute"
+            })
+            recommendations.append({
+                'title': "Organiser des ateliers de restitution communautaire",
+                'description': "Restituer périodiquement les résultats de l'analyse qualitative aux populations et acteurs concernés.",
+                'priority': "Moyenne"
+            })
+            
+    # Assurer au moins 2 recommandations
     if len(recommendations) < 2:
         recommendations.append({
-            'title': "Améliorer les canaux de communication",
-            'description': "Mettre en place un espace de réclamations pour les usagers.",
+            'title': "Renforcer la communication entre les parties prenantes",
+            'description': "Créer un espace d'échange régulier (réunion mensuelle ou canal numérique partagé) pour suivre les progrès.",
             'priority': "Moyenne"
         })
         

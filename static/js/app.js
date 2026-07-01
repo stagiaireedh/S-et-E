@@ -2486,7 +2486,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 matrixContainer.appendChild(actorCard);
             });
             
-            if (!hasAnswers) {
+            if (hasAnswers) {
+                // Créer et ajouter la zone de synthèse
+                const synthCard = document.createElement('div');
+                synthCard.className = 'card mt-4 p-3';
+                synthCard.style.borderLeft = '4px solid var(--indigo)';
+                synthCard.style.background = 'rgba(99, 102, 241, 0.03)';
+                synthCard.style.marginTop = '20px';
+                synthCard.innerHTML = `
+                    <div style="display:flex; align-items:center; gap:8px; font-weight:700; font-size:13.5px; color:var(--indigo); margin-bottom:8px;">
+                        <span>🧠</span> <span>SYNTHÈSE DE L'ASSISTANT IA</span>
+                    </div>
+                    <div id="matrix-ai-synthesis-content" style="font-size:12.5px; line-height:1.5; color:rgba(255,255,255,0.85);">
+                        <small class="text-muted">Génération de la synthèse qualitative...</small>
+                    </div>
+                `;
+                matrixContainer.appendChild(synthCard);
+                
+                requestAPI(`/api/questions/${questionId}/synthesis`, { silent: true })
+                    .then(res => {
+                        const contentEl = document.getElementById('matrix-ai-synthesis-content');
+                        if (contentEl) {
+                            contentEl.innerHTML = res.synthesis || "Impossible de générer la synthèse.";
+                        }
+                    })
+                    .catch(err => {
+                        const contentEl = document.getElementById('matrix-ai-synthesis-content');
+                        if (contentEl) {
+                            contentEl.innerHTML = "<span class='text-danger'>Erreur de communication avec le service d'analyse.</span>";
+                        }
+                    });
+            } else {
                 matrixContainer.innerHTML = '<div class="text-center text-muted py-5"><p>Aucune réponse recueillie pour cette question spécifique.</p></div>';
             }
         } catch (err) {
