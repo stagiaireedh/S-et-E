@@ -1850,12 +1850,24 @@ document.addEventListener('DOMContentLoaded', () => {
     let importedStructure = null;
     
     btnTriggerImportBuilder.addEventListener('click', () => {
-        alert("Clic détecté sur le bouton d'importation. Tentative d'ouverture du modal...");
         importedStructure = null;
         btnConfirmImportQuest.disabled = true;
         document.getElementById('import-preview-results').style.display = 'none';
         document.getElementById('import-file-label').innerHTML = 'Glissez-déposez votre document ici ou <span class="file-browse-btn">parcourez</span>';
         modalImportQuestionnaire.classList.add('active');
+        
+        // Diagnostic détaillé des styles calculés
+        const computedStyle = window.getComputedStyle(modalImportQuestionnaire);
+        const parentTag = modalImportQuestionnaire.parentElement ? modalImportQuestionnaire.parentElement.tagName + " (id=" + modalImportQuestionnaire.parentElement.id + ")" : "Aucun";
+        alert(
+            "DIAGNOSTIC VISUEL :\n" +
+            "- Parent : " + parentTag + "\n" +
+            "- Display calculé : " + computedStyle.display + "\n" +
+            "- Z-Index calculé : " + computedStyle.zIndex + "\n" +
+            "- Visibility : " + computedStyle.visibility + "\n" +
+            "- Opacity : " + computedStyle.opacity + "\n" +
+            "- Classes : " + modalImportQuestionnaire.className
+        );
     });
     
     document.getElementById('btn-close-import-modal').addEventListener('click', () => modalImportQuestionnaire.classList.remove('active'));
