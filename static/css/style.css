@@ -1047,11 +1047,13 @@ body {
     display: none;
     align-items: center;
     justify-content: center;
-    animation: fadeInModal 0.25s ease forwards;
+    opacity: 0;
 }
 
 .modal-overlay.active {
     display: flex;
+    opacity: 1;
+    animation: fadeInModal 0.25s ease forwards;
 }
 
 @keyframes fadeInModal {
@@ -1067,6 +1069,10 @@ body {
     max-width: 90vw;
     box-shadow: var(--shadow-premium);
     overflow: hidden;
+    opacity: 1;
+}
+
+.modal-overlay.active .modal-card {
     animation: slideUpModal 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
