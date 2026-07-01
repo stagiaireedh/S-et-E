@@ -760,6 +760,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
+    // Alerte diagnostic sur le clic d'un champ de saisie d'entretien
+    dynamicQuestionsContainer.addEventListener('click', (e) => {
+        const target = e.target;
+        if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.tagName === 'SELECT') {
+            const computedStyle = window.getComputedStyle(target);
+            alert(
+                "CLIC CHAMP SAISIE :\n" +
+                "- Balise : " + target.tagName + "\n" +
+                "- Nom (name) : " + target.name + "\n" +
+                "- Disabled : " + target.disabled + "\n" +
+                "- ReadOnly : " + target.readOnly + "\n" +
+                "- Display : " + computedStyle.display + "\n" +
+                "- Pointer-Events : " + computedStyle.pointerEvents + "\n" +
+                "- Classes : " + target.className
+            );
+        }
+    });
+    
     function renderQuestionsFields() {
         const quest = questionnaires.find(q => q.id === activeQuestionnaireId);
         if (!quest) return;
@@ -1359,6 +1377,16 @@ document.addEventListener('DOMContentLoaded', () => {
                                  document.getElementById('prop-text-content') || 
                                  document.getElementById('prop-title-text') || 
                                  document.getElementById('prop-generic-label');
+            
+            // Alerte diagnostic de sélection de bloc
+            alert(
+                "CLIC BLOC CANVAS :\n" +
+                "- ID du bloc : " + blockId + "\n" +
+                "- Type du bloc : " + block.block_type + "\n" +
+                "- Contenu : " + JSON.stringify(block.content) + "\n" +
+                "- Champ de saisie trouvé : " + (primaryInput ? "OUI (" + primaryInput.id + ")" : "NON")
+            );
+
             if (primaryInput) {
                 primaryInput.focus();
                 // Sélectionner tout le texte pour faciliter le remplacement rapide
