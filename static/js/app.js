@@ -1373,6 +1373,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Désactiver le glisser-déposer sur le bloc pendant qu'on tape du texte
                 editEl.addEventListener('focus', () => {
                     blockEl.setAttribute('draggable', 'false');
+                    if (selectedBlockId !== block.id) {
+                        selectCanvasBlock(block.id, true);
+                    }
                 });
                 
                 editEl.addEventListener('blur', async () => {
@@ -1395,9 +1398,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
                 
-                // Éviter de fermer ou perturber la sélection
+                // Sélectionner le bloc au clic sur le texte éditable tout en évitant de fermer
                 editEl.addEventListener('click', (e) => {
                     e.stopPropagation();
+                    if (selectedBlockId !== block.id) {
+                        selectCanvasBlock(block.id, true);
+                    }
                 });
             });
 
@@ -1488,7 +1494,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('canvas-progress-fill').style.width = `${progressPct}%`;
     }
     
-    function selectCanvasBlock(blockId) {
+    function selectCanvasBlock(blockId, skipFocus = false) {
         selectedBlockId = blockId;
         
         const blockEls = builderCanvas.querySelectorAll('.builder-block');
@@ -1504,6 +1510,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!block) return;
         
         renderPropertiesPanel(block);
+        
+        if (skipFocus) return;
         
         // Auto-focus le champ d'édition principal dans le panneau de propriétés pour "donner la main" directement
         setTimeout(() => {
@@ -1881,9 +1889,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     selectCanvasBlock(res.block.id);
                 }
             } catch (err) {
-                console.error("Erreur drop canvas vide:", err);
+                console.error("Erreur drop sur canvas:", err);
             }
-        }
+        } else if (data.source === 'canvas') {
+            const draggedId = data.id;
+            const draggedIdx = builderBlocks.findIndex(b => b.id === draggedId);
+            if (draggedIdx !== -1) {
+                const [draggedBlock] = builderBlocks.splice(draggedIdx, 1);
+                builderBlocks.push(draggedBlock);
+                builderBlocks.forEach((b, i) => b.order_index = i + 1);
+                renderCanvasBlocks();
+                
+                await requestAPI(`/api/questionnaires/${activeBuilderQuestionnaireId}/blocks/reorder`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ blocks: builderBlocks.map(b => ({ id: b.id, order_index: b.order_index })) })
+                });
+            }
     });
 
     document.getElementById('btn-canvas-add-block-bottom').addEventListener('click', async () => {

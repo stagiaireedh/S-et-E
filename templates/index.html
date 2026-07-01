@@ -11,7 +11,7 @@
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Custom Style Sheet -->
-    <link rel="stylesheet" href="/static/css/style.css?v=3.6">
+    <link rel="stylesheet" href="/static/css/style.css?v=3.7">
 </head>
 <body>
     <!-- Lumières d'ambiance décoratives en arrière-plan -->
@@ -120,17 +120,17 @@
     </div>
 
     <!-- Modale de Confirmation de Suppression Réutilisable -->
-    <div id="modal-confirm-delete" class="modal" style="display: none;">
-        <div class="modal-content modal-confirm-content">
+    <div id="modal-confirm-delete" class="modal-overlay">
+        <div class="modal-card">
             <div class="modal-header">
-                <h3>Confirmation de suppression</h3>
-                <span class="close-modal" id="btn-close-confirm-modal">&times;</span>
+                <h2 style="font-size:16px; margin:0;">Confirmation de suppression</h2>
+                <button class="modal-close" id="btn-close-confirm-modal">&times;</button>
             </div>
-            <div class="modal-body">
-                <p id="confirm-modal-text">Êtes-vous sûr de vouloir supprimer cet élément ? Cette action est irréversible et supprimera toutes les données liées.</p>
-                <div class="confirm-item-preview" id="confirm-modal-item-name">Nom de l'élément</div>
+            <div style="margin-top: 15px; margin-bottom: 20px;">
+                <p id="confirm-modal-text" class="text-muted" style="font-size: 13px; line-height: 1.5; margin:0;">Êtes-vous sûr de vouloir supprimer cet élément ? Cette action est irréversible et supprimera toutes les données liées.</p>
+                <div class="confirm-item-preview" id="confirm-modal-item-name" style="margin-top: 12px; padding: 10px; background: rgba(220, 53, 69, 0.08); border: 1px solid rgba(220, 53, 69, 0.15); border-radius: 6px; color: #ff6b6b; font-weight: 600; font-size: 12.5px; word-break: break-all;">Nom de l'élément</div>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer" style="display: flex; gap: 8px; justify-content: flex-end;">
                 <button id="btn-cancel-delete" class="btn-secondary">Annuler</button>
                 <button id="btn-confirm-delete" class="btn-danger">Supprimer définitivement</button>
             </div>
@@ -855,6 +855,6 @@
     </div>
 
     <!-- Script de l'application -->
-    <script src="/static/js/app.js?v=3.6"></script>
+    <script src="/static/js/app.js?v=3.7"></script>
 </body>
 </html>
