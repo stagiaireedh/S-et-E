@@ -809,10 +809,19 @@ document.addEventListener('DOMContentLoaded', () => {
                                         }
                                         loadQuestionnairesList();
                                     } else {
+                                        alert(
+                                            "ERREUR SUPPRESSION QUESTIONNAIRE :\n" +
+                                            "- Message : " + (res.message || "Erreur inconnue")
+                                        );
                                         showToast(res.message || "Erreur lors de la suppression.", "danger");
                                     }
                                 } catch (err) {
                                     console.error(err);
+                                    alert(
+                                        "ERREUR TECHNIQUE SUPPRESSION :\n" +
+                                        "- Message : " + err.message + "\n" +
+                                        "- Stack : " + err.stack
+                                    );
                                     showToast("Erreur de connexion au serveur.", "danger");
                                 }
                             }
