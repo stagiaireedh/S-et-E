@@ -1043,7 +1043,7 @@ body {
     height: 100vh;
     background-color: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(6px);
-    z-index: 2000;
+    z-index: 3000;
     display: none;
     align-items: center;
     justify-content: center;
@@ -1471,7 +1471,7 @@ body.light-theme .confirm-item-preview {
     background: linear-gradient(135deg, #090b16 0%, #11132a 50%, #1e1330 100%);
     background-size: 400% 400%;
     animation: gradientShift 15s ease infinite;
-    z-index: 2000;
+    z-index: 4000;
     display: flex;
     justify-content: center;
     align-items: center;
