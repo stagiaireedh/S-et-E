@@ -732,12 +732,107 @@ document.addEventListener('DOMContentLoaded', () => {
                 selectQuestionnaire.appendChild(opt);
             });
             
+            // Remplissage de la liste sous le sélecteur
+            const dynamicList = document.getElementById('collecte-questionnaires-list');
+            if (dynamicList) {
+                dynamicList.innerHTML = '';
+                if (questionnaires.length === 0) {
+                    dynamicList.innerHTML = '<p class="text-muted text-center py-2" style="font-size: 11px;">Aucun questionnaire.</p>';
+                } else {
+                    questionnaires.forEach(q => {
+                        const item = document.createElement('div');
+                        item.className = `collecte-questionnaire-item ${activeQuestionnaireId === q.id ? 'active' : ''}`;
+                        item.setAttribute('data-id', q.id);
+                        
+                        item.innerHTML = `
+                            <div class="quest-title" title="${q.title}">${q.title}</div>
+                            <div class="quest-actions">
+                                <button class="quest-action-btn edit-btn" title="Modifier les questions">✏️</button>
+                                <button class="quest-action-btn share-btn" title="Partager">👥</button>
+                                <button class="quest-action-btn delete-btn" title="Supprimer">🗑️</button>
+                            </div>
+                        `;
+                        
+                        item.addEventListener('click', (e) => {
+                            if (e.target.closest('.quest-action-btn')) return;
+                            activeQuestionnaireId = q.id;
+                            saisieQuestionnaireId.value = q.id;
+                            selectQuestionnaire.value = q.id;
+                            renderQuestionsFields();
+                            
+                            dynamicList.querySelectorAll('.collecte-questionnaire-item').forEach(el => {
+                                el.classList.remove('active');
+                            });
+                            item.classList.add('active');
+                            
+                            const btnShare = document.getElementById('btn-share-questionnaire');
+                            if (btnShare) btnShare.style.display = 'block';
+                            if (btnEditActiveQuest) btnEditActiveQuest.style.display = 'block';
+                        });
+                        
+                        item.querySelector('.edit-btn').addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            openVisualBuilder(q.id);
+                        });
+                        
+                        item.querySelector('.share-btn').addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            activeQuestionnaireId = q.id;
+                            saisieQuestionnaireId.value = q.id;
+                            selectQuestionnaire.value = q.id;
+                            
+                            const shareModal = document.getElementById('modal-share');
+                            if (shareModal) {
+                                shareModal.style.display = 'flex';
+                                loadCollaboratorsList();
+                            }
+                        });
+                        
+                        item.querySelector('.delete-btn').addEventListener('click', async (e) => {
+                            e.stopPropagation();
+                            if (confirm(`Êtes-vous sûr de vouloir supprimer le questionnaire "${q.title}" et toutes ses données associées ?`)) {
+                                try {
+                                    const res = await requestAPI(`/api/questionnaires/${q.id}`, {
+                                        method: 'DELETE'
+                                    });
+                                    if (res.success) {
+                                        showToast("Questionnaire supprimé avec succès !", "success");
+                                        if (activeQuestionnaireId === q.id) {
+                                            activeQuestionnaireId = null;
+                                            saisieQuestionnaireId.value = '';
+                                            selectQuestionnaire.value = '';
+                                            dynamicQuestionsContainer.innerHTML = '';
+                                            
+                                            const btnShare = document.getElementById('btn-share-questionnaire');
+                                            if (btnShare) btnShare.style.display = 'none';
+                                            if (btnEditActiveQuest) btnEditActiveQuest.style.display = 'none';
+                                        }
+                                        loadQuestionnairesList();
+                                    } else {
+                                        showToast(res.message || "Erreur lors de la suppression.", "danger");
+                                    }
+                                } catch (err) {
+                                    console.error(err);
+                                    showToast("Erreur de connexion au serveur.", "danger");
+                                }
+                            }
+                        });
+                        
+                        dynamicList.appendChild(item);
+                    });
+                }
+            }
+            
             if (activeQuestionnaireId) {
                 selectQuestionnaire.value = activeQuestionnaireId;
                 renderQuestionsFields();
                 if (btnEditActiveQuest) btnEditActiveQuest.style.display = 'block';
+                const btnShare = document.getElementById('btn-share-questionnaire');
+                if (btnShare) btnShare.style.display = 'block';
             } else {
                 if (btnEditActiveQuest) btnEditActiveQuest.style.display = 'none';
+                const btnShare = document.getElementById('btn-share-questionnaire');
+                if (btnShare) btnShare.style.display = 'none';
             }
         } catch (err) {
             console.error("Erreur chargement questionnaires:", err);
@@ -937,7 +1032,7 @@ document.addEventListener('DOMContentLoaded', () => {
     formInterviewSaisie.addEventListener('submit', async (e) => {
         e.preventDefault();
         
-        const questionnaireId = parseInt(saisieQuestionnaireId.value);
+        const questionnaireId = parseInt(saisieQuestionnaireId.value) || parseInt(selectQuestionnaire.value);
         const title = document.getElementById('saisie-title').value;
         const interview_date = document.getElementById('saisie-date').value;
         const interviewer = document.getElementById('saisie-interviewer').value;
@@ -1033,9 +1128,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (btnEditActiveQuest) btnEditActiveQuest.style.display = 'none';
  
                 switchTab('dashboard');
+            } else {
+                alert(
+                    "ERREUR ENREGISTREMENT ENTRETIEN :\n" +
+                    "- Message : " + (result.message || "Inconnu") + "\n" +
+                    "- Données envoyées : " + JSON.stringify(payload)
+                );
+                showToast(result.message || "Erreur de traitement.", "danger");
             }
         } catch (err) {
             console.error("Erreur lors de la sauvegarde de l'entretien:", err);
+            alert(
+                "ERREUR TECHNIQUE DE SAUVEGARDE :\n" +
+                "- Erreur : " + err.message + "\n" +
+                "- Données envoyées : " + JSON.stringify(payload)
+            );
+            showToast("Une erreur s'est produite lors de l'enregistrement.", "danger");
         }
     });    
     // --- MODAL CREATION DE QUESTIONNAIRE (CANVA/NOTION STYLE) ---

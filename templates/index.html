@@ -11,7 +11,7 @@
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Custom Style Sheet -->
-    <link rel="stylesheet" href="/static/css/style.css?v=3.2">
+    <link rel="stylesheet" href="/static/css/style.css?v=3.3">
 </head>
 <body>
     <!-- Lumières d'ambiance décoratives en arrière-plan -->
@@ -373,9 +373,17 @@
                             ✏️ Éditer ce Questionnaire
                         </button>
                         <div class="divider">ou</div>
-                        <button id="btn-create-questionnaire" class="btn-secondary btn-block">
+                        <button id="btn-create-questionnaire" class="btn-secondary btn-block" style="margin-bottom: 20px;">
                             Créer un nouveau Questionnaire
                         </button>
+                        
+                        <!-- Liste dynamique des questionnaires -->
+                        <div class="questionnaires-list-container" style="margin-top: 25px;">
+                            <h4 style="font-size: 13px; font-weight:700; margin-bottom: 12px; opacity:0.8; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:6px;">📁 Vos Questionnaires</h4>
+                            <div id="collecte-questionnaires-list" class="collecte-list-group" style="max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+                                <!-- Rempli par app.js -->
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Right Column: Manual Entry Form -->
@@ -847,6 +855,6 @@
     </div>
 
     <!-- Script de l'application -->
-    <script src="/static/js/app.js?v=3.2"></script>
+    <script src="/static/js/app.js?v=3.3"></script>
 </body>
 </html>

@@ -300,6 +300,18 @@ def create_app():
             
         return jsonify(questionnaire.to_dict())
 
+    @app.route('/api/questionnaires/<int:questionnaire_id>', methods=['DELETE'])
+    @login_required
+    def delete_questionnaire(questionnaire_id):
+        """Supprime un questionnaire en cascade."""
+        quest = Questionnaire.query.get_or_404(questionnaire_id)
+        if quest.project.user_id != current_user.id:
+            return jsonify({'success': False, 'message': 'Seul le propriétaire du projet peut supprimer un questionnaire.'}), 403
+            
+        db.session.delete(quest)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Questionnaire supprimé avec succès.'})
+
     @app.route('/api/questions/<int:question_id>', methods=['PUT'])
     @login_required
     def update_question(question_id):
