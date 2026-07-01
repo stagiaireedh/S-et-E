@@ -151,13 +151,47 @@ def _local_extract_themes(text):
     sorted_themes = sorted(detected_themes.items(), key=lambda x: x[1], reverse=True)
     return [{'theme': k, 'weight': v} for k, v in sorted_themes]
 
+# Cache global en mémoire pour les triangulations de projet
+TRIANGULATION_CACHE = {}
+
+def get_project_cache_key(project_id):
+    """Calcule une signature unique de l'état des données du projet pour invalider le cache."""
+    try:
+        from models import db, InterviewSession, Attachment
+        from sqlalchemy import func
+        
+        # Max date de création des sessions
+        max_session_time = db.session.query(func.max(InterviewSession.created_at)).filter_by(project_id=project_id).scalar()
+        # Nombre de sessions
+        session_count = db.session.query(func.count(InterviewSession.id)).filter_by(project_id=project_id).scalar()
+        # Max date d'upload des pièces jointes
+        max_attachment_time = db.session.query(func.max(Attachment.uploaded_at)).filter_by(project_id=project_id).scalar()
+        
+        return {
+            'session_count': session_count,
+            'max_session_time': max_session_time.isoformat() if max_session_time else 'none',
+            'max_attachment_time': max_attachment_time.isoformat() if max_attachment_time else 'none'
+        }
+    except Exception as e:
+        logger.warning(f"Erreur de génération de clé de cache pour le projet {project_id} : {e}")
+        return None
+
 # --- 3. TRIANGULATION COMPLÈTE & IA ---
 def run_project_triangulation(project_id):
     """
     Calcule la triangulation qualitative et quantitative du projet.
     Interroge l'IA en cascade pour générer une synthèse, des risques et des recommandations
     structurées, et bascule sur le mode local en cas d'erreur.
+    Utilise un cache en mémoire invalidé dynamiquement si les données du projet changent.
     """
+    # Vérification du cache
+    current_sig = get_project_cache_key(project_id)
+    if current_sig:
+        cached = TRIANGULATION_CACHE.get(project_id)
+        if cached and cached.get('signature') == current_sig:
+            logger.info(f"Retour de la triangulation depuis le cache pour le projet {project_id}")
+            return cached['data']
+
     sessions = InterviewSession.query.filter_by(project_id=project_id).all()
     if not sessions:
         return {'success': False, 'message': "Aucune donnée d'entretien disponible pour ce projet."}
@@ -174,6 +208,8 @@ def run_project_triangulation(project_id):
             if ans.answer_text and len(ans.answer_text.strip()) > 5:
                 verbatims_by_actor[actor].append(ans.answer_text)
                 all_comments.append(ans.answer_text)
+
+    res_data = None
 
     # 1. TENTATIVE IA COMMUNE
     if ai_client:
@@ -215,12 +251,22 @@ def run_project_triangulation(project_id):
             
             if result and 'avg_sentiment_score' in result and 'risks' in result:
                 result['success'] = True
-                return result
+                res_data = result
         except Exception as e:
             logger.warning(f"Échec de la triangulation globale IA, bascule sur la logique locale : {e}")
 
-    # 2. FALLBACK LOCAL (MOCKED/RULE-BASED)
-    return _local_run_project_triangulation(project_id, sessions, verbatims_by_actor, all_comments)
+    if res_data is None:
+        # 2. FALLBACK LOCAL (MOCKED/RULE-BASED)
+        res_data = _local_run_project_triangulation(project_id, sessions, verbatims_by_actor, all_comments)
+
+    # Enregistrement dans le cache
+    if current_sig and res_data:
+        TRIANGULATION_CACHE[project_id] = {
+            'signature': current_sig,
+            'data': res_data
+        }
+
+    return res_data
 
 def _local_run_project_triangulation(project_id, sessions, verbatims_by_actor, all_comments):
     total_sentiment_score = 0

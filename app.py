@@ -596,6 +596,14 @@ def create_app():
         db.session.commit()
         return jsonify({'success': True, 'message': 'Entretien supprimé.'})
 
+    QUESTION_SYNTHESIS_CACHE = {}
+
+    def get_question_synthesis_cache_key(question_id):
+        from sqlalchemy import func
+        ans_count = db.session.query(func.count(Answer.id)).filter_by(question_id=question_id).scalar()
+        max_ans_id = db.session.query(func.max(Answer.id)).filter_by(question_id=question_id).scalar() or 0
+        return f"{ans_count}_{max_ans_id}"
+
     @app.route('/api/questions/<int:question_id>/synthesis', methods=['GET'])
     @login_required
     def get_question_synthesis(question_id):
@@ -603,6 +611,12 @@ def create_app():
         question = Question.query.get_or_404(question_id)
         if question.questionnaire.project.user_id != current_user.id:
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
+
+        # Vérification du cache de synthèse
+        current_sig = get_question_synthesis_cache_key(question_id)
+        cached = QUESTION_SYNTHESIS_CACHE.get(question_id)
+        if cached and cached.get('signature') == current_sig:
+            return jsonify({'success': True, 'synthesis': cached['synthesis']})
             
         answers = Answer.query.filter_by(question_id=question_id).all()
         if not answers:
@@ -616,6 +630,8 @@ def create_app():
                 grouped_answers[actor] = []
             grouped_answers[actor].append(ans.answer_text)
             
+        synthesis = None
+
         # Tenter d'utiliser la cascade d'IA
         from ai_service import ai_client
         if ai_client:
@@ -635,22 +651,30 @@ def create_app():
                     "Réponds obligatoirement en français sous forme de texte brut."
                 )
                 
-                synthesis = ai_client.generate(system_prompt, corpus)
-                if synthesis:
-                    return jsonify({'success': True, 'synthesis': synthesis.strip()})
+                raw_synth = ai_client.generate(system_prompt, corpus)
+                if raw_synth:
+                    synthesis = raw_synth.strip()
             except Exception as e:
                 app.logger.warning(f"Échec de génération de la synthèse de question par IA : {e}")
                 
-        # Repli local analytique de base (Simulation)
-        summary_parts = []
-        for actor, texts in grouped_answers.items():
-            if len(texts) == 1:
-                summary_parts.append(f"La catégorie **{actor}** signale : « {texts[0]} »")
-            else:
-                summary_parts.append(f"Les représentants de la catégorie **{actor}** s'accordent sur le point suivant : « {texts[0]} » (sur {len(texts)} témoignages).")
-                
-        synthesis = " <br> ".join(summary_parts)
-        return jsonify({'success': True, 'synthesis': f"<strong>Synthèse analytique locale :</strong><br>{synthesis}"})
+        if not synthesis:
+            # Repli local analytique de base (Simulation)
+            summary_parts = []
+            for actor, texts in grouped_answers.items():
+                if len(texts) == 1:
+                    summary_parts.append(f"La catégorie **{actor}** signale : « {texts[0]} »")
+                else:
+                    summary_parts.append(f"Les représentants de la catégorie **{actor}** s'accordent sur le point suivant : « {texts[0]} » (sur {len(texts)} témoignages).")
+                    
+            synthesis = f"<strong>Synthèse analytique locale :</strong><br>" + " <br> ".join(summary_parts)
+
+        # Enregistrement dans le cache
+        QUESTION_SYNTHESIS_CACHE[question_id] = {
+            'signature': current_sig,
+            'synthesis': synthesis
+        }
+
+        return jsonify({'success': True, 'synthesis': synthesis})
 
     # --- API IMPORT DE PIÈCES JOINTES ---
     @app.route('/api/projects/<int:project_id>/attachments', methods=['POST'])
