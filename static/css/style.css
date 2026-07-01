@@ -1043,7 +1043,7 @@ body {
     height: 100vh;
     background-color: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(6px);
-    z-index: 100;
+    z-index: 2000;
     display: none;
     align-items: center;
     justify-content: center;
