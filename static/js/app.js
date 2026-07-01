@@ -1214,20 +1214,20 @@ document.addEventListener('DOMContentLoaded', () => {
             if (block.block_type === 'title') {
                 innerContentHtml = `
                     <div class="block-render-title">
-                        <h2 style="font-size: 20px; font-weight:800; margin-bottom:4px;">${content.title || 'Titre du Questionnaire'}</h2>
-                        <p class="text-muted" style="font-size:12px; margin:0;">${content.description || 'Description / objectifs...'}</p>
+                        <h2 class="editable-canvas-text" data-prop="title" contenteditable="true" style="font-size: 20px; font-weight:800; margin-bottom:4px; outline:none; border-bottom:1px dashed transparent;">${content.title || 'Titre du Questionnaire'}</h2>
+                        <p class="editable-canvas-text text-muted" data-prop="description" contenteditable="true" style="font-size:12px; margin:0; outline:none; border-bottom:1px dashed transparent;">${content.description || 'Description / objectifs...'}</p>
                     </div>
                 `;
             } else if (block.block_type === 'section') {
                 innerContentHtml = `
                     <div class="block-render-section">
-                        <h3 style="font-size: 15px; font-weight:700; margin:0;">${content.title || 'Section sans titre'}</h3>
+                        <h3 class="editable-canvas-text" data-prop="title" contenteditable="true" style="font-size: 15px; font-weight:700; margin:0; outline:none; border-bottom:1px dashed transparent;">${content.title || 'Section sans titre'}</h3>
                     </div>
                 `;
             } else if (block.block_type === 'text') {
                 innerContentHtml = `
                     <div class="block-render-text">
-                        <p style="font-size: 13px; margin:0; opacity:0.85;">${content.text || 'Entrez votre texte descriptif ici...'}</p>
+                        <p class="editable-canvas-text" data-prop="text" contenteditable="true" style="font-size: 13px; margin:0; opacity:0.85; outline:none; border-bottom:1px dashed transparent;">${content.text || 'Entrez votre texte descriptif ici...'}</p>
                     </div>
                 `;
             } else if (block.block_type === 'question') {
@@ -1235,7 +1235,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const qTypeLabel = content.question_type === 'select' ? 'Choix unique' : 'Texte libre';
                 innerContentHtml = `
                     <div class="block-render-question">
-                        <label class="font-weight-bold" style="font-size:13.5px; display:block;">❓ ${content.label || 'Question sans titre'} ${isReqStar}</label>
+                        <label class="font-weight-bold" style="font-size:13.5px; display:block;">
+                            ❓ <span class="editable-canvas-text" data-prop="label" contenteditable="true" style="outline:none; border-bottom:1px dashed transparent; display:inline-block;">${content.label || 'Question sans titre'}</span> ${isReqStar}
+                        </label>
                         <div class="text-muted" style="font-size: 11px; margin-top: 2px;">Type : ${qTypeLabel} ${content.help_text ? `| Aide : ${content.help_text}` : ''}</div>
                         ${content.question_type === 'select' ? 
                             `<select class="custom-select mt-2" style="font-size:12.5px;" disabled><option>${(content.choices || []).join(', ') || 'Aucun choix défini'}</option></select>` : 
@@ -1250,7 +1252,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="block-render-generic">
                         <div class="d-flex align-items-center gap-2">
                             <span>${icon}</span>
-                            <span class="font-weight-bold" style="font-size:13.5px;">${label}</span>
+                            <span class="editable-canvas-text font-weight-bold" data-prop="label" contenteditable="true" style="font-size:13.5px; outline:none; border-bottom:1px dashed transparent;">${label}</span>
                         </div>
                         <p class="text-muted small mt-1 mb-0" style="font-size:11px;">${content.help_text || 'Composant automatique de saisie terrain.'}</p>
                     </div>
@@ -1266,8 +1268,41 @@ document.addEventListener('DOMContentLoaded', () => {
                 ${innerContentHtml}
             `;
             
+            // Gestion de l'édition directe en ligne (inline editing)
+            blockEl.querySelectorAll('.editable-canvas-text').forEach(editEl => {
+                // Désactiver le glisser-déposer sur le bloc pendant qu'on tape du texte
+                editEl.addEventListener('focus', () => {
+                    blockEl.setAttribute('draggable', 'false');
+                });
+                
+                editEl.addEventListener('blur', async () => {
+                    blockEl.setAttribute('draggable', 'true');
+                    const prop = editEl.getAttribute('data-prop');
+                    const newVal = editEl.innerText.trim();
+                    
+                    const blockContent = block.content || {};
+                    blockContent[prop] = newVal;
+                    block.content = blockContent;
+                    
+                    await requestAPI(`/api/blocks/${block.id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: blockContent })
+                    });
+                    
+                    if (selectedBlockId === block.id) {
+                        renderPropertiesPanel(block);
+                    }
+                });
+                
+                // Éviter de fermer ou perturber la sélection
+                editEl.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                });
+            });
+
             blockEl.addEventListener('click', (e) => {
-                if (e.target.closest('.block-controls')) return;
+                if (e.target.closest('.block-controls') || e.target.closest('.editable-canvas-text')) return;
                 selectCanvasBlock(block.id);
             });
             

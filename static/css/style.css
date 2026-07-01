@@ -2321,3 +2321,14 @@ body.light-theme .library-saved-blocks {
 .builder-block select {
     pointer-events: none;
 }
+
+.editable-canvas-text:hover {
+    border-bottom: 1px dashed var(--indigo) !important;
+    cursor: text;
+}
+.editable-canvas-text:focus {
+    border-bottom: 1px solid var(--indigo) !important;
+    background: rgba(99, 102, 241, 0.05);
+    border-radius: 4px;
+    padding: 0 4px;
+}
