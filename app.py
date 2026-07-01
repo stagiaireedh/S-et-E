@@ -179,9 +179,20 @@ def create_app():
     @app.route('/api/projects', methods=['GET'])
     @login_required
     def get_projects():
-        """Récupère la liste de tous les projets de l'utilisateur."""
-        projects = Project.query.filter_by(user_id=current_user.id).order_by(Project.created_at.desc()).all()
-        return jsonify([p.to_dict() for p in projects])
+        """Récupère la liste de tous les projets de l'utilisateur ou partagés avec lui."""
+        owned_projects = Project.query.filter_by(user_id=current_user.id).all()
+        
+        shared_quest_ids = db.session.query(SharedQuestionnaire.questionnaire_id).filter_by(shared_with_user_id=current_user.id).subquery()
+        shared_projects = Project.query.join(Questionnaire).filter(Questionnaire.id.in_(shared_quest_ids)).all()
+        
+        all_projects = list(owned_projects)
+        owned_ids = {p.id for p in owned_projects}
+        for p in shared_projects:
+            if p.id not in owned_ids:
+                all_projects.append(p)
+                
+        all_projects.sort(key=lambda x: x.created_at, reverse=True)
+        return jsonify([p.to_dict() for p in all_projects])
 
     @app.route('/api/projects', methods=['POST'])
     @login_required
@@ -400,12 +411,25 @@ def create_app():
     @app.route('/api/projects/<int:project_id>/sessions', methods=['GET'])
     @login_required
     def get_project_sessions(project_id):
-        """Récupère toutes les sessions d'un projet."""
+        """Récupère toutes les sessions d'un projet, y compris celles des questionnaires partagés."""
         project = Project.query.get_or_404(project_id)
-        if project.user_id != current_user.id:
+        is_owner = (project.user_id == current_user.id)
+        
+        shares = SharedQuestionnaire.query.filter_by(shared_with_user_id=current_user.id).all()
+        shared_quest_ids = [s.questionnaire_id for s in shares]
+        has_shared_access = len(shared_quest_ids) > 0
+        
+        if not (is_owner or has_shared_access):
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
             
-        sessions = InterviewSession.query.filter_by(project_id=project_id).order_by(InterviewSession.interview_date.desc()).all()
+        if is_owner:
+            sessions = InterviewSession.query.filter_by(project_id=project_id).order_by(InterviewSession.interview_date.desc()).all()
+        else:
+            sessions = InterviewSession.query.filter(
+                InterviewSession.project_id == project_id,
+                InterviewSession.questionnaire_id.in_(shared_quest_ids)
+            ).order_by(InterviewSession.interview_date.desc()).all()
+            
         return jsonify([s.to_dict() for s in sessions])
 
     @app.route('/api/projects/<int:project_id>/sessions', methods=['POST'])
@@ -418,11 +442,11 @@ def create_app():
         data = request.get_json()
         quest_id = data.get('questionnaire_id') if data else None
         
-        # Vérification si partagé avec droit edit
-        share = SharedQuestionnaire.query.filter_by(questionnaire_id=quest_id, shared_with_user_id=current_user.id, permission='edit').first()
-        is_editor = (share is not None)
+        # Vérification si partagé (n'importe quel rôle pour la saisie terrain)
+        share = SharedQuestionnaire.query.filter_by(questionnaire_id=quest_id, shared_with_user_id=current_user.id).first()
+        is_collaborator = (share is not None)
         
-        if not (is_owner or is_editor):
+        if not (is_owner or is_collaborator):
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
             
         if not data or not data.get('title') or not quest_id:
@@ -478,10 +502,10 @@ def create_app():
             
         is_owner = (session.project.user_id == current_user.id)
         is_author = (session.user_id == current_user.id)
-        share = SharedQuestionnaire.query.filter_by(questionnaire_id=session.questionnaire_id, shared_with_user_id=current_user.id, permission='edit').first()
-        is_editor = (share is not None)
+        share = SharedQuestionnaire.query.filter_by(questionnaire_id=session.questionnaire_id, shared_with_user_id=current_user.id).first()
+        is_collaborator = (share is not None)
         
-        if not (is_owner or is_author or is_editor):
+        if not (is_owner or is_author or is_collaborator):
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
             
         data = request.get_json()
