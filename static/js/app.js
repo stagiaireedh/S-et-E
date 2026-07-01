@@ -1119,6 +1119,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Ouvrir le constructeur visuel
     async function openVisualBuilder(questionnaireId) {
+        activeQuestionnaireId = questionnaireId; // Conserver actif après fermeture
         activeBuilderQuestionnaireId = questionnaireId;
         selectedBlockId = null;
         propertiesPanelContent.innerHTML = '<p class="text-muted text-center py-5">Sélectionnez un bloc sur le canvas pour modifier ses propriétés.</p>';
@@ -1756,7 +1757,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('btn-builder-save').addEventListener('click', () => {
-        showToast("Toutes les modifications sont synchronisées en temps réel !", "success");
+        if (document.activeElement) {
+            document.activeElement.blur();
+        }
+        showToast("Toutes les modifications ont été enregistrées avec succès !", "success");
     });
     
     document.getElementById('btn-builder-preview').addEventListener('click', () => {
@@ -1855,19 +1859,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('import-preview-results').style.display = 'none';
         document.getElementById('import-file-label').innerHTML = 'Glissez-déposez votre document ici ou <span class="file-browse-btn">parcourez</span>';
         modalImportQuestionnaire.classList.add('active');
-        
-        // Diagnostic détaillé des styles calculés
-        const computedStyle = window.getComputedStyle(modalImportQuestionnaire);
-        const parentTag = modalImportQuestionnaire.parentElement ? modalImportQuestionnaire.parentElement.tagName + " (id=" + modalImportQuestionnaire.parentElement.id + ")" : "Aucun";
-        alert(
-            "DIAGNOSTIC VISUEL :\n" +
-            "- Parent : " + parentTag + "\n" +
-            "- Display calculé : " + computedStyle.display + "\n" +
-            "- Z-Index calculé : " + computedStyle.zIndex + "\n" +
-            "- Visibility : " + computedStyle.visibility + "\n" +
-            "- Opacity : " + computedStyle.opacity + "\n" +
-            "- Classes : " + modalImportQuestionnaire.className
-        );
     });
     
     document.getElementById('btn-close-import-modal').addEventListener('click', () => modalImportQuestionnaire.classList.remove('active'));
