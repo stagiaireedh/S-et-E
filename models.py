@@ -72,7 +72,7 @@ class Questionnaire(db.Model):
     # Relations
     questions = db.relationship('Question', backref='questionnaire', lazy=True, order_by="Question.order_num", cascade="all, delete-orphan")
     blocks = db.relationship('QuestionnaireBlock', backref='questionnaire', lazy=True, order_by="QuestionnaireBlock.order_index", cascade="all, delete-orphan")
-    sessions = db.relationship('InterviewSession', backref='questionnaire', lazy=True)
+    sessions = db.relationship('InterviewSession', backref='questionnaire', lazy=True, cascade="all, delete-orphan")
     shares = db.relationship('SharedQuestionnaire', lazy=True, cascade="all, delete-orphan")
 
     def to_dict(self):

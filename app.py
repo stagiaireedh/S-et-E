@@ -308,6 +308,17 @@ def create_app():
         if quest.project.user_id != current_user.id:
             return jsonify({'success': False, 'message': 'Seul le propriétaire du projet peut supprimer un questionnaire.'}), 403
             
+        # Supprimer les pièces jointes des sessions sur le disque avant de supprimer le questionnaire
+        for session in quest.sessions:
+            for attachment in session.attachments:
+                try:
+                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], attachment.filepath)
+                    if os.path.exists(filepath):
+                        os.remove(filepath)
+                except Exception:
+                    pass
+                db.session.delete(attachment)
+                
         db.session.delete(quest)
         db.session.commit()
         return jsonify({'success': True, 'message': 'Questionnaire supprimé avec succès.'})
