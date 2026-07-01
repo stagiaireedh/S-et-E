@@ -1850,6 +1850,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let importedStructure = null;
     
     btnTriggerImportBuilder.addEventListener('click', () => {
+        alert("Clic détecté sur le bouton d'importation. Tentative d'ouverture du modal...");
         importedStructure = null;
         btnConfirmImportQuest.disabled = true;
         document.getElementById('import-preview-results').style.display = 'none';
