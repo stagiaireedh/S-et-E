@@ -15,6 +15,7 @@ def get_or_create_question_id(q_id_str, questionnaire_id):
     """
     Récupère ou crée dynamiquement l'ID entier de la Question 
     pour éviter les plantages si l'identifiant envoyé est de la forme 'block_XXX'.
+    Supporte tous les types de blocs de saisie (question, checkbox, matrix, gps, photo, comment, etc.).
     """
     try:
         return int(q_id_str)
@@ -23,19 +24,28 @@ def get_or_create_question_id(q_id_str, questionnaire_id):
             try:
                 block_id = int(q_id_str.replace('block_', ''))
                 block = QuestionnaireBlock.query.get(block_id)
-                if block and block.block_type == 'question':
+                if block and block.block_type not in ['title', 'section', 'text']:
                     q_id = block.content.get('question_id')
                     if q_id:
                         q_exists = Question.query.get(q_id)
                         if q_exists:
                             return q_exists.id
                             
+                    # Déterminer les choix/options selon le type de bloc
+                    choices_list = None
+                    if block.block_type == 'question':
+                        choices_list = block.content.get('choices')
+                    elif block.block_type == 'checkbox':
+                        choices_list = block.content.get('options')
+                        
+                    choices = ",".join(choices_list) if isinstance(choices_list, list) else ""
+                    
                     # Création dynamique de la question manquante
                     q_entry = Question(
                         questionnaire_id=questionnaire_id,
-                        text=block.content.get('label', 'Question'),
-                        question_type=block.content.get('question_type', 'text'),
-                        choices=",".join(block.content.get('choices', [])) if isinstance(block.content.get('choices'), list) else "",
+                        text=block.content.get('label', block.block_type.capitalize()),
+                        question_type=block.content.get('question_type', block.block_type),
+                        choices=choices,
                         order_num=block.order_index,
                         is_required=block.content.get('is_required', False),
                         help_text=block.content.get('help_text', '')
@@ -858,12 +868,14 @@ def create_app():
             order_index = max_idx + 1
             
         # Synchronisation avec le modèle Question historique
-        if block_type == 'question':
+        if block_type not in ['title', 'section', 'text']:
+            choices_list = content.get('choices') if block_type == 'question' else content.get('options')
+            choices = ",".join(choices_list) if isinstance(choices_list, list) else ""
             q_entry = Question(
                 questionnaire_id=questionnaire_id,
-                text=content.get('label', 'Question sans titre'),
-                question_type=content.get('question_type', 'text'),
-                choices=",".join(content.get('choices', [])) if isinstance(content.get('choices'), list) else "",
+                text=content.get('label', block_type.capitalize()),
+                question_type=content.get('question_type', block_type),
+                choices=choices,
                 order_num=order_index,
                 is_required=content.get('is_required', False),
                 help_text=content.get('help_text', '')
@@ -902,24 +914,27 @@ def create_app():
             if block.block_type == 'title':
                 quest.title = block.content.get('title', quest.title)
                 quest.description = block.content.get('description', quest.description)
-            # Synchronisation de la table Question si c'est un bloc Question
-            elif block.block_type == 'question':
+            # Synchronisation de la table Question si c'est un bloc de saisie
+            elif block.block_type not in ['title', 'section', 'text']:
                 q_id = block.content.get('question_id')
+                choices_list = block.content.get('choices') if block.block_type == 'question' else block.content.get('options')
+                choices = ",".join(choices_list) if isinstance(choices_list, list) else ""
+                
                 if q_id:
                     q = Question.query.get(q_id)
                     if q:
-                        q.text = block.content.get('label', 'Question')
-                        q.question_type = block.content.get('question_type', 'text')
-                        q.choices = ",".join(block.content.get('choices', [])) if isinstance(block.content.get('choices'), list) else ""
+                        q.text = block.content.get('label', block.block_type.capitalize())
+                        q.question_type = block.content.get('question_type', block.block_type)
+                        q.choices = choices
                         q.is_required = block.content.get('is_required', False)
                         q.help_text = block.content.get('help_text', '')
                         q.order_num = block.order_index
                 else:
                     q_entry = Question(
                         questionnaire_id=quest.id,
-                        text=block.content.get('label', 'Question'),
-                        question_type=block.content.get('question_type', 'text'),
-                        choices=",".join(block.content.get('choices', [])) if isinstance(block.content.get('choices'), list) else "",
+                        text=block.content.get('label', block.block_type.capitalize()),
+                        question_type=block.content.get('question_type', block.block_type),
+                        choices=choices,
                         order_num=block.order_index,
                         is_required=block.content.get('is_required', False),
                         help_text=block.content.get('help_text', '')
@@ -932,7 +947,7 @@ def create_app():
                     
         if 'order_index' in data:
             block.order_index = data['order_index']
-            if block.block_type == 'question':
+            if block.block_type not in ['title', 'section', 'text']:
                 q_id = block.content.get('question_id') if block.content else None
                 if q_id:
                     q = Question.query.get(q_id)
@@ -956,7 +971,7 @@ def create_app():
         if not (is_owner or (share and share.permission == 'edit')):
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
             
-        if block.block_type == 'question':
+        if block.block_type not in ['title', 'section', 'text']:
             q_id = block.content.get('question_id') if block.content else None
             if q_id:
                 q = Question.query.get(q_id)
@@ -984,7 +999,7 @@ def create_app():
             b = QuestionnaireBlock.query.filter_by(id=bo['id'], questionnaire_id=questionnaire_id).first()
             if b:
                 b.order_index = bo['order_index']
-                if b.block_type == 'question':
+                if b.block_type not in ['title', 'section', 'text']:
                     q_id = b.content.get('question_id') if b.content else None
                     if q_id:
                         q = Question.query.get(q_id)
@@ -1202,12 +1217,14 @@ def create_app():
             b_type = b.get('block_type', 'text')
             b_content = dict(b.get('content', {}))
             
-            if b_type == 'question':
+            if b_type not in ['title', 'section', 'text']:
+                choices_list = b_content.get('choices') if b_type == 'question' else b_content.get('options')
+                choices = ",".join(choices_list) if isinstance(choices_list, list) else ""
                 q_entry = Question(
                     questionnaire_id=quest.id,
-                    text=b_content.get('label', 'Question sans titre'),
-                    question_type=b_content.get('question_type', 'text'),
-                    choices=",".join(b_content.get('choices', [])) if isinstance(b_content.get('choices'), list) else "",
+                    text=b_content.get('label', b_type.capitalize()),
+                    question_type=b_content.get('question_type', b_type),
+                    choices=choices,
                     order_num=idx,
                     is_required=b_content.get('is_required', False),
                     help_text=b_content.get('help_text', '')
