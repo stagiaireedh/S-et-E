@@ -898,8 +898,12 @@ def create_app():
         data = request.get_json() or {}
         if 'content' in data:
             block.content = data['content']
+            # Synchronisation du titre du Questionnaire
+            if block.block_type == 'title':
+                quest.title = block.content.get('title', quest.title)
+                quest.description = block.content.get('description', quest.description)
             # Synchronisation de la table Question si c'est un bloc Question
-            if block.block_type == 'question':
+            elif block.block_type == 'question':
                 q_id = block.content.get('question_id')
                 if q_id:
                     q = Question.query.get(q_id)

@@ -1277,7 +1277,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-builder-close').addEventListener('click', () => {
         builderOverlay.style.display = 'none';
         activeBuilderQuestionnaireId = null;
-        loadQuestionnairesList();
+        loadQuestionnairesList().then(() => {
+            if (activeQuestionnaireId) {
+                renderQuestionsFields();
+            }
+        });
     });
 
     // Rendre les blocs sur le Canvas
