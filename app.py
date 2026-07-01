@@ -8,7 +8,7 @@ from werkzeug.utils import secure_filename
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from config import Config, allowed_file
 from models import db, User, Project, Questionnaire, Question, InterviewSession, Answer, Attachment, SharedQuestionnaire, QuestionnaireBlock, BlockLibrary
-from ai_service import run_project_triangulation, chat_assistant_respond
+from ai_service import run_project_triangulation, chat_assistant_respond, POSSIBLE_POSITIVES, POSSIBLE_NEGATIVES, THEMES_DICT
 from pdf_service import generate_global_evaluation_pdf, generate_session_summary_pdf
 
 def get_or_create_question_id(q_id_str, questionnaire_id):
@@ -751,25 +751,27 @@ def create_app():
         for s in project.sessions:
             score_sum = 0
             for a in s.answers:
-                text_lower = a.answer_text.lower()
-                if any(w in text_lower for w in ['panne', 'difficile', 'problème', 'mauvais', 'échoué', 'défaut', 'plainte']):
-                    score_sum -= 0.5
-                elif any(w in text_lower for w in ['bon', 'excellent', 'très bien', 'réussite', 'facile', 'satisfait', 'progrès']):
-                    score_sum += 0.5
+                text_lower = a.answer_text.lower() if hasattr(a.answer_text, 'lower') else str(a.answer_text).lower()
+                for pos in POSSIBLE_POSITIVES:
+                    if pos in text_lower:
+                        score_sum += 0.5
+                for neg in POSSIBLE_NEGATIVES:
+                    if neg in text_lower:
+                        score_sum -= 0.5
             avg_score = score_sum / len(s.answers) if s.answers else 0
             sentiment_label = "Positif" if avg_score > 0.15 else ("Négatif" if avg_score < -0.15 else "Neutre")
             
             for a in s.answers:
-                text_lower = a.answer_text.lower()
-                theme = "Maintenance & Technique"
-                if any(w in text_lower for w in ['eau', 'forage', 'pompe', 'installation', 'pression']):
-                    theme = "Maintenance & Technique"
-                elif any(w in text_lower for w in ['santé', 'diarrhée', 'malade', 'famille', 'vie', 'revenus', 'salades', 'maraîcher']):
-                    theme = "Impact & Satisfaction"
-                elif any(w in text_lower for w in ['comité', 'cotisation', 'transparence', 'gestion', 'argent', 'technicien']):
-                    theme = "Aspect Financier & Gestion"
-                else:
-                    theme = "Général"
+                text_lower = a.answer_text.lower() if hasattr(a.answer_text, 'lower') else str(a.answer_text).lower()
+                
+                # Détermination dynamique du thème par correspondance de mots-clés
+                theme = "Général"
+                max_matches = 0
+                for theme_name, keywords in THEMES_DICT.items():
+                    matches = sum(1 for kw in keywords if kw in text_lower)
+                    if matches > max_matches:
+                        max_matches = matches
+                        theme = theme_name
                     
                 data_list.append({
                     'Projet': project.name,
@@ -804,25 +806,27 @@ def create_app():
         for s in project.sessions:
             score_sum = 0
             for a in s.answers:
-                text_lower = a.answer_text.lower()
-                if any(w in text_lower for w in ['panne', 'difficile', 'problème', 'mauvais', 'échoué', 'défaut', 'plainte']):
-                    score_sum -= 0.5
-                elif any(w in text_lower for w in ['bon', 'excellent', 'très bien', 'réussite', 'facile', 'satisfait', 'progrès']):
-                    score_sum += 0.5
+                text_lower = a.answer_text.lower() if hasattr(a.answer_text, 'lower') else str(a.answer_text).lower()
+                for pos in POSSIBLE_POSITIVES:
+                    if pos in text_lower:
+                        score_sum += 0.5
+                for neg in POSSIBLE_NEGATIVES:
+                    if neg in text_lower:
+                        score_sum -= 0.5
             avg_score = score_sum / len(s.answers) if s.answers else 0
             sentiment_label = "Positif" if avg_score > 0.15 else ("Négatif" if avg_score < -0.15 else "Neutre")
             
             for a in s.answers:
-                text_lower = a.answer_text.lower()
-                theme = "Maintenance & Technique"
-                if any(w in text_lower for w in ['eau', 'forage', 'pompe', 'installation', 'pression']):
-                    theme = "Maintenance & Technique"
-                elif any(w in text_lower for w in ['santé', 'diarrhée', 'malade', 'famille', 'vie', 'revenus', 'salades', 'maraîcher']):
-                    theme = "Impact & Satisfaction"
-                elif any(w in text_lower for w in ['comité', 'cotisation', 'transparence', 'gestion', 'argent', 'technicien']):
-                    theme = "Aspect Financier & Gestion"
-                else:
-                    theme = "Général"
+                text_lower = a.answer_text.lower() if hasattr(a.answer_text, 'lower') else str(a.answer_text).lower()
+                
+                # Détermination dynamique du thème par correspondance de mots-clés
+                theme = "Général"
+                max_matches = 0
+                for theme_name, keywords in THEMES_DICT.items():
+                    matches = sum(1 for kw in keywords if kw in text_lower)
+                    if matches > max_matches:
+                        max_matches = matches
+                        theme = theme_name
                     
                 data_list.append({
                     'Projet': project.name,
