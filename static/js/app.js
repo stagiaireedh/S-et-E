@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let questionnaires = [];
     let charts = {}; // Stockage des instances de Chart.js pour pouvoir les mettre à jour
     let editingSessionId = null; // Session ID en cours d'édition
+    let showAllSessions = false; // Toggle pour afficher tous les entretiens sur le tableau de bord
     
     // --- UTILS : TOASTS & INDICATEURS DE CHARGEMENT ---
     function showToast(message, type = 'success') {
@@ -393,41 +394,139 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('kpi-total-attachments').innerText = "0";
             document.getElementById('kpi-sentiment-avg').innerText = "-";
             document.querySelector('#table-recent-sessions tbody').innerHTML = '<tr><td colspan="6" class="text-center text-muted">Veuillez d\'abord créer un projet.</td></tr>';
+            const questListDiv = document.getElementById('dashboard-questionnaires-list');
+            if (questListDiv) questListDiv.innerHTML = '<p class="text-muted text-center py-3" style="font-size:12px;">Veuillez créer un projet.</p>';
             renderAttachments([]);
             renderDashboardCharts([]);
             return;
         }
         
         try {
-            const sessions = await requestAPI(`/api/projects/${activeProjectId}/sessions`);
-            const quests = await requestAPI(`/api/projects/${activeProjectId}/questionnaires`);
-            const attachments = await requestAPI(`/api/projects/${activeProjectId}/attachments`);
+            // Chargements parallèles des KPIs de base, questionnaires et pièces jointes
+            const [sessions, quests, attachments, kpiRes] = await Promise.all([
+                requestAPI(`/api/projects/${activeProjectId}/sessions`),
+                requestAPI(`/api/projects/${activeProjectId}/questionnaires`),
+                requestAPI(`/api/projects/${activeProjectId}/attachments`),
+                requestAPI(`/api/projects/${activeProjectId}/sentiment-kpi`, { silent: true })
+            ]);
             
             document.getElementById('kpi-total-sessions').innerText = sessions.length;
             document.getElementById('kpi-total-questionnaires').innerText = quests.length;
             document.getElementById('kpi-total-attachments').innerText = attachments.length;
             
-            try {
-                const triang = await requestAPI(`/api/projects/${activeProjectId}/triangulation`, { silent: true });
-                if (triang.success) {
-                    const score = triang.avg_sentiment_score;
-                    const label = triang.sentiment_label.toUpperCase();
-                    document.getElementById('kpi-sentiment-avg').innerText = `${score} (${label})`;
-                } else {
-                    document.getElementById('kpi-sentiment-avg').innerText = "-";
-                }
-            } catch {
+            // Mise à jour de l'indicateur de sentiment moyen ultra-rapide
+            if (kpiRes && kpiRes.success) {
+                const score = kpiRes.avg_sentiment_score;
+                const label = kpiRes.sentiment_label.toUpperCase();
+                document.getElementById('kpi-sentiment-avg').innerText = `${score} (${label})`;
+            } else {
                 document.getElementById('kpi-sentiment-avg').innerText = "-";
             }
             
-            // Remplir le tableau des entretiens récents
+            // 1. Remplir la liste des questionnaires sur le tableau de bord
+            const questListDiv = document.getElementById('dashboard-questionnaires-list');
+            if (questListDiv) {
+                questListDiv.innerHTML = '';
+                if (quests.length === 0) {
+                    questListDiv.innerHTML = '<p class="text-muted text-center py-3" style="font-size:12px;">Aucun questionnaire actif.</p>';
+                } else {
+                    quests.forEach(q => {
+                        const item = document.createElement('div');
+                        item.className = 'dashboard-questionnaire-item';
+                        item.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); border-radius:6px; font-size:12.5px;';
+                        item.innerHTML = `
+                            <div style="display:flex; flex-direction:column; gap:2px; flex: 1; min-width: 0; cursor:pointer;" class="quest-info-click">
+                                <strong style="text-overflow:ellipsis; overflow:hidden; white-space:nowrap; color:var(--text-color);">${q.title}</strong>
+                                <small class="text-muted" style="font-size:11px;">${q.blocks ? q.blocks.length : 0} bloc(s)</small>
+                            </div>
+                            <div style="display:flex; gap:8px; align-items:center;">
+                                <button class="btn-link btn-edit-quest-dash" title="Éditer le questionnaire" style="font-size:14px; padding:2px; border:none; background:none; cursor:pointer; color:var(--indigo);">✏️</button>
+                                <button class="btn-link btn-delete-quest-dash" title="Supprimer le questionnaire" style="font-size:14px; padding:2px; border:none; background:none; cursor:pointer; color:var(--danger);">🗑️</button>
+                            </div>
+                        `;
+                        
+                        // Clic sur les infos du questionnaire pour le sélectionner dans collecte
+                        item.querySelector('.quest-info-click').addEventListener('click', () => {
+                            activeQuestionnaireId = q.id;
+                            selectQuestionnaire.value = q.id;
+                            saisieQuestionnaireId.value = q.id;
+                            renderQuestionsFields();
+                            
+                            const btnShare = document.getElementById('btn-share-questionnaire');
+                            if (btnShare) btnShare.style.display = 'block';
+                            if (btnEditActiveQuest) btnEditActiveQuest.style.display = 'block';
+                            
+                            switchTab('collecte');
+                            showToast(`Questionnaire "${q.title}" sélectionné.`, "info");
+                        });
+                        
+                        // Éditer le questionnaire (ouvre le visual builder)
+                        item.querySelector('.btn-edit-quest-dash').addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            activeQuestionnaireId = q.id;
+                            openVisualBuilder(q.id);
+                        });
+                        
+                        // Supprimer le questionnaire
+                        item.querySelector('.btn-delete-quest-dash').addEventListener('click', async (e) => {
+                            e.stopPropagation();
+                            if (confirm(`Êtes-vous sûr de vouloir supprimer le questionnaire "${q.title}" et toutes ses données associées ?`)) {
+                                try {
+                                    const res = await requestAPI(`/api/questionnaires/${q.id}`, {
+                                        method: 'DELETE'
+                                    });
+                                    if (res.success) {
+                                        showToast("Questionnaire supprimé avec succès !", "success");
+                                        if (activeQuestionnaireId === q.id) {
+                                            activeQuestionnaireId = null;
+                                            saisieQuestionnaireId.value = '';
+                                            selectQuestionnaire.value = '';
+                                            dynamicQuestionsContainer.innerHTML = '';
+                                            
+                                            const btnShare = document.getElementById('btn-share-questionnaire');
+                                            if (btnShare) btnShare.style.display = 'none';
+                                            if (btnEditActiveQuest) btnEditActiveQuest.style.display = 'none';
+                                        }
+                                        loadDashboardData();
+                                        loadQuestionnairesList();
+                                    } else {
+                                        alert("ERREUR SUPPRESSION :\n- " + (res.message || "Erreur inconnue"));
+                                    }
+                                } catch (err) {
+                                    console.error(err);
+                                }
+                            }
+                        });
+                        
+                        questListDiv.appendChild(item);
+                    });
+                }
+            }
+            
+            // 2. Remplir le tableau des entretiens (avec gestion dynamique de la limite)
             const tbody = document.querySelector('#table-recent-sessions tbody');
             tbody.innerHTML = '';
             
+            const btnToggleAll = document.getElementById('btn-toggle-all-sessions');
+            const listTitle = document.getElementById('sessions-list-title');
+            
+            if (btnToggleAll) {
+                btnToggleAll.innerText = showAllSessions ? "Réduire" : "Voir tout";
+            }
+            if (listTitle) {
+                listTitle.innerText = showAllSessions ? `Tous les Entretiens (${sessions.length})` : `Entretiens Récents (${Math.min(5, sessions.length)})`;
+            }
+            
             if (sessions.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Aucun entretien enregistré.</td></tr>';
+                if (btnToggleAll) btnToggleAll.style.display = 'none';
             } else {
-                sessions.slice(0, 5).forEach(s => {
+                if (btnToggleAll) btnToggleAll.style.display = 'inline-block';
+                
+                // Limite d'affichage à 5 ou tout afficher
+                const sessionsToRender = showAllSessions ? sessions : sessions.slice(0, 5);
+                
+                sessionsToRender.forEach(s => {
                     const tr = document.createElement('tr');
                     
                     let individualScore = 0;
@@ -480,6 +579,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     tbody.appendChild(tr);
                 });
                 
+                // Attacher les écouteurs du tableau
                 document.querySelectorAll('.btn-download-session-pdf').forEach(btn => {
                     btn.addEventListener('click', (e) => {
                         const sId = btn.getAttribute('data-id');
@@ -511,6 +611,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     btnQuickSaisie.addEventListener('click', () => switchTab('collecte'));
+
+    const btnToggleAllSessions = document.getElementById('btn-toggle-all-sessions');
+    if (btnToggleAllSessions) {
+        btnToggleAllSessions.addEventListener('click', () => {
+            showAllSessions = !showAllSessions;
+            loadDashboardData();
+        });
+    }
+
+    const btnDashboardNewQuest = document.getElementById('btn-dashboard-new-quest');
+    if (btnDashboardNewQuest) {
+        btnDashboardNewQuest.addEventListener('click', () => {
+            switchTab('collecte');
+            const btnCreate = document.getElementById('btn-create-questionnaire');
+            if (btnCreate) btnCreate.click();
+        });
+    }
     
     // --- 5. RENDER DES GRAPHIQUES (CHART.JS) ---
     function renderDashboardCharts(sessions) {

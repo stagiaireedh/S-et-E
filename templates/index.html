@@ -11,7 +11,7 @@
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Custom Style Sheet -->
-     <link rel="stylesheet" href="/static/css/style.css?v=3.13">
+     <link rel="stylesheet" href="/static/css/style.css?v=3.14">
 </head>
 <body>
     <!-- Lumières d'ambiance décoratives en arrière-plan -->
@@ -312,8 +312,11 @@
                     <!-- Recent Sessions -->
                     <div class="card recent-list-card">
                         <div class="card-header-flex">
-                            <h3>Entretiens Récents</h3>
-                            <button id="btn-quick-saisie" class="btn-link">Saisir un entretien</button>
+                            <h3 id="sessions-list-title">Entretiens Récents</h3>
+                            <div style="display: flex; gap: 12px; align-items: center;">
+                                <button id="btn-toggle-all-sessions" class="btn-link" style="font-size: 12px; font-weight: 600;">Voir tout</button>
+                                <button id="btn-quick-saisie" class="btn-link">Saisir un entretien</button>
+                            </div>
                         </div>
                         <div class="table-container">
                             <table class="custom-table" id="table-recent-sessions">
@@ -334,11 +337,23 @@
                         </div>
                     </div>
 
-                    <!-- Project Documents / Attachments -->
-                    <div class="card recent-list-card">
-                        <div class="card-header-flex">
-                            <h3>Documents et Pièces Jointes</h3>
+                    <div style="display: flex; flex-direction: column; gap: 24px;">
+                        <!-- Vos Questionnaires -->
+                        <div class="card recent-list-card">
+                            <div class="card-header-flex">
+                                <h3>Vos Questionnaires</h3>
+                                <button id="btn-dashboard-new-quest" class="btn-link" style="font-size:12.5px;">+ Nouveau</button>
+                            </div>
+                            <div id="dashboard-questionnaires-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; margin-top: 10px; padding-right: 4px;">
+                                <!-- Rempli dynamiquement -->
+                            </div>
                         </div>
+
+                        <!-- Project Documents / Attachments -->
+                        <div class="card recent-list-card">
+                            <div class="card-header-flex">
+                                <h3>Documents et Pièces Jointes</h3>
+                            </div>
                         <div class="file-drop-zone" id="file-drop-area">
                             <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
@@ -351,6 +366,7 @@
                         </div>
                     </div>
                 </div>
+            </div>
             </section>
 
             <!-- ================= TAB: COLLECTE & SAISIE ================= -->
@@ -855,6 +871,6 @@
     </div>
 
     <!-- Script de l'application -->
-     <script src="/static/js/app.js?v=3.13"></script>
+     <script src="/static/js/app.js?v=3.14"></script>
 </body>
 </html>

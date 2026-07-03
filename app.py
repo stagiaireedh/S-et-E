@@ -734,6 +734,48 @@ def create_app():
         """Sert un fichier uploadé de manière sécurisée."""
         return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
+    @app.route('/api/projects/<int:project_id>/sentiment-kpi', methods=['GET'])
+    @login_required
+    def get_project_sentiment_kpi(project_id):
+        """Calcule rapidement le score de sentiment moyen du projet sans appeler d'IA externe."""
+        project = Project.query.get_or_404(project_id)
+        if project.user_id != current_user.id:
+            return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
+            
+        sessions = project.sessions
+        if not sessions:
+            return jsonify({'success': True, 'avg_sentiment_score': 0.0, 'sentiment_label': 'Neutre'})
+            
+        from ai_service import POSSIBLE_POSITIVES, POSSIBLE_NEGATIVES
+        
+        total_score = 0
+        sentiment_count = 0
+        
+        for s in sessions:
+            for ans in s.answers:
+                text_lower = ans.answer_text.lower() if hasattr(ans.answer_text, 'lower') else str(ans.answer_text).lower()
+                if not text_lower.strip():
+                    continue
+                score = 0
+                for pos in POSSIBLE_POSITIVES:
+                    if pos in text_lower:
+                        score += 0.5
+                for neg in POSSIBLE_NEGATIVES:
+                    if neg in text_lower:
+                        score -= 0.5
+                score = max(-1.0, min(1.0, score))
+                total_score += score
+                sentiment_count += 1
+                
+        avg_score = round(total_score / sentiment_count, 2) if sentiment_count > 0 else 0.0
+        label = 'Positif' if avg_score > 0.15 else ('Négatif' if avg_score < -0.15 else 'Neutre')
+        
+        return jsonify({
+            'success': True,
+            'avg_sentiment_score': avg_score,
+            'sentiment_label': label
+        })
+
     # --- API ANALYSE IA & CHAT ASSISTANT ---
     @app.route('/api/projects/<int:project_id>/triangulation', methods=['GET'])
     @login_required
