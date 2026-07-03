@@ -8,7 +8,7 @@ from werkzeug.utils import secure_filename
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from config import Config, allowed_file
 from models import db, User, Project, Questionnaire, Question, InterviewSession, Answer, Attachment, SharedQuestionnaire, QuestionnaireBlock, BlockLibrary
-from ai_service import run_project_triangulation, chat_assistant_respond, POSSIBLE_POSITIVES, POSSIBLE_NEGATIVES, THEMES_DICT
+from ai_service import run_project_triangulation, chat_assistant_respond, POSSIBLE_POSITIVES, POSSIBLE_NEGATIVES, THEMES_DICT, _local_analyze_sentiment
 from pdf_service import generate_global_evaluation_pdf, generate_session_summary_pdf
 
 def get_or_create_question_id(q_id_str, questionnaire_id):
@@ -737,18 +737,29 @@ def create_app():
     @app.route('/api/projects/<int:project_id>/sentiment-kpi', methods=['GET'])
     @login_required
     def get_project_sentiment_kpi(project_id):
-        """Calcule rapidement le score de sentiment moyen du projet sans appeler d'IA externe."""
+        """Calcule le score de sentiment moyen du projet, en utilisant le cache ou la logique locale unifiée."""
         project = Project.query.get_or_404(project_id)
         if project.user_id != current_user.id:
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
             
+        # Tenter d'abord de récupérer le score réel du cache de triangulation pour cohérence complète avec l'IA
+        from ai_service import TRIANGULATION_CACHE, get_project_cache_key
+        current_sig = get_project_cache_key(project_id)
+        if current_sig:
+            cached = TRIANGULATION_CACHE.get(project_id)
+            if cached and cached.get('signature') == current_sig:
+                data = cached['data']
+                return jsonify({
+                    'success': True,
+                    'avg_sentiment_score': data.get('avg_sentiment_score', 0.0),
+                    'sentiment_label': data.get('sentiment_label', 'Neutre')
+                })
+                
         sessions = project.sessions
         if not sessions:
             return jsonify({'success': True, 'avg_sentiment_score': 0.0, 'sentiment_label': 'Neutre'})
             
-        from ai_service import POSSIBLE_POSITIVES, POSSIBLE_NEGATIVES
-        
-        total_score = 0
+        total_score = 0.0
         sentiment_count = 0
         
         for s in sessions:
@@ -756,15 +767,8 @@ def create_app():
                 text_lower = ans.answer_text.lower() if hasattr(ans.answer_text, 'lower') else str(ans.answer_text).lower()
                 if not text_lower.strip():
                     continue
-                score = 0
-                for pos in POSSIBLE_POSITIVES:
-                    if pos in text_lower:
-                        score += 0.5
-                for neg in POSSIBLE_NEGATIVES:
-                    if neg in text_lower:
-                        score -= 0.5
-                score = max(-1.0, min(1.0, score))
-                total_score += score
+                res = _local_analyze_sentiment(text_lower)
+                total_score += res['score']
                 sentiment_count += 1
                 
         avg_score = round(total_score / sentiment_count, 2) if sentiment_count > 0 else 0.0

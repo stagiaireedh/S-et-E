@@ -433,7 +433,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     quests.forEach(q => {
                         const item = document.createElement('div');
                         item.className = 'dashboard-questionnaire-item';
-                        item.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); border-radius:6px; font-size:12.5px;';
+                        item.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); border-radius:6px; font-size:12.5px; min-width:0;';
                         item.innerHTML = `
                             <div style="display:flex; flex-direction:column; gap:2px; flex: 1; min-width: 0; cursor:pointer;" class="quest-info-click">
                                 <strong style="text-overflow:ellipsis; overflow:hidden; white-space:nowrap; color:var(--text-color);">${q.title}</strong>
