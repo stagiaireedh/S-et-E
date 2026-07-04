@@ -403,21 +403,21 @@ document.addEventListener('DOMContentLoaded', () => {
         
         try {
             // Chargements parallèles des KPIs de base, questionnaires et pièces jointes
-            const [sessions, quests, attachments, kpiRes] = await Promise.all([
+            const [sessions, quests, attachments, triang] = await Promise.all([
                 requestAPI(`/api/projects/${activeProjectId}/sessions`),
                 requestAPI(`/api/projects/${activeProjectId}/questionnaires`),
                 requestAPI(`/api/projects/${activeProjectId}/attachments`),
-                requestAPI(`/api/projects/${activeProjectId}/sentiment-kpi`, { silent: true })
+                requestAPI(`/api/projects/${activeProjectId}/triangulation`, { silent: true })
             ]);
             
             document.getElementById('kpi-total-sessions').innerText = sessions.length;
             document.getElementById('kpi-total-questionnaires').innerText = quests.length;
             document.getElementById('kpi-total-attachments').innerText = attachments.length;
             
-            // Mise à jour de l'indicateur de sentiment moyen ultra-rapide
-            if (kpiRes && kpiRes.success) {
-                const score = kpiRes.avg_sentiment_score;
-                const label = kpiRes.sentiment_label.toUpperCase();
+            // Mise à jour de l'indicateur de sentiment moyen
+            if (triang && triang.success) {
+                const score = triang.avg_sentiment_score;
+                const label = triang.sentiment_label.toUpperCase();
                 document.getElementById('kpi-sentiment-avg').innerText = `${score} (${label})`;
             } else {
                 document.getElementById('kpi-sentiment-avg').innerText = "-";
