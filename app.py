@@ -739,16 +739,12 @@ def create_app():
         return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
     def warm_triangulation_cache(project_id):
-        """Calcule la triangulation en arrière-plan pour chauffer le cache."""
-        import threading
-        def run():
-            with app.app_context():
-                try:
-                    run_project_triangulation(project_id)
-                    app.logger.info(f"Cache de triangulation réchauffé en arrière-plan pour le projet {project_id}")
-                except Exception as e:
-                    app.logger.error(f"Erreur lors du réchauffement du cache en arrière-plan : {e}")
-        threading.Thread(target=run, daemon=True).start()
+        """Calcule la triangulation de manière synchrone pour garantir la cohérence immédiate du cache."""
+        try:
+            run_project_triangulation(project_id)
+            app.logger.info(f"Cache de triangulation réchauffé de manière synchrone pour le projet {project_id}")
+        except Exception as e:
+            app.logger.error(f"Erreur lors du réchauffement synchrone du cache : {e}")
 
     @app.route('/api/projects/<int:project_id>/sentiment-kpi', methods=['GET'])
     @login_required
@@ -776,10 +772,21 @@ def create_app():
             except Exception as e:
                 app.logger.warning(f"Erreur de lecture du cache DB pour le KPI: {e}")
         else:
-            # Si le cache est manquant ou expiré, on déclenche le réchauffement en arrière-plan
+            # Si le cache est manquant ou expiré, on le réchauffe de manière synchrone
             warm_triangulation_cache(project_id)
+            # Tenter de relire le cache frais
+            if project.cached_triangulation_signature == current_sig_str and project.cached_triangulation_data:
+                try:
+                    data = json.loads(project.cached_triangulation_data)
+                    return jsonify({
+                        'success': True,
+                        'avg_sentiment_score': data.get('avg_sentiment_score', 0.0),
+                        'sentiment_label': data.get('sentiment_label', 'Neutre')
+                    })
+                except Exception as e:
+                    app.logger.warning(f"Erreur de lecture du cache DB après réchauffement: {e}")
                 
-        # 2. Si non présent ou expiré, calcul rapide local pour garder un chargement sous les 2ms
+        # 2. Si non présent ou expiré (ex: en cas d'erreur de réchauffement), calcul rapide local
         sessions = project.sessions
         if not sessions:
             return jsonify({'success': True, 'avg_sentiment_score': 0.0, 'sentiment_label': 'Neutre'})
