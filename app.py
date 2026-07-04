@@ -517,6 +517,7 @@ def create_app():
                     db.session.add(answer)
                 
         db.session.commit()
+        warm_triangulation_cache(project_id)
         return jsonify({'success': True, 'session': session.to_dict()}), 201
 
     @app.route('/api/sessions/<int:session_id>', methods=['GET'])
@@ -572,6 +573,7 @@ def create_app():
                     db.session.add(answer)
                 
         db.session.commit()
+        warm_triangulation_cache(session.project_id)
         return jsonify({'success': True, 'session': session.to_dict()})
 
     @app.route('/api/sessions/<int:session_id>', methods=['DELETE'])
@@ -592,8 +594,10 @@ def create_app():
         except Exception as e:
             app.logger.error(f"Erreur lors de la suppression des pièces jointes : {e}")
             
+        project_id = session.project_id
         db.session.delete(session)
         db.session.commit()
+        warm_triangulation_cache(project_id)
         return jsonify({'success': True, 'message': 'Entretien supprimé.'})
 
     QUESTION_SYNTHESIS_CACHE = {}
@@ -713,7 +717,7 @@ def create_app():
             )
             db.session.add(attachment)
             db.session.commit()
-            
+            warm_triangulation_cache(project_id)
             return jsonify({'success': True, 'attachment': attachment.to_dict()}), 201
             
         return jsonify({'success': False, 'message': 'Extension de fichier non autorisée.'}), 400
@@ -734,6 +738,18 @@ def create_app():
         """Sert un fichier uploadé de manière sécurisée."""
         return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
+    def warm_triangulation_cache(project_id):
+        """Calcule la triangulation en arrière-plan pour chauffer le cache."""
+        import threading
+        def run():
+            with app.app_context():
+                try:
+                    run_project_triangulation(project_id)
+                    app.logger.info(f"Cache de triangulation réchauffé en arrière-plan pour le projet {project_id}")
+                except Exception as e:
+                    app.logger.error(f"Erreur lors du réchauffement du cache en arrière-plan : {e}")
+        threading.Thread(target=run, daemon=True).start()
+
     @app.route('/api/projects/<int:project_id>/sentiment-kpi', methods=['GET'])
     @login_required
     def get_project_sentiment_kpi(project_id):
@@ -742,19 +758,28 @@ def create_app():
         if project.user_id != current_user.id:
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
             
-        # Tenter d'abord de récupérer le score réel du cache de triangulation pour cohérence complète avec l'IA
-        from ai_service import TRIANGULATION_CACHE, get_project_cache_key
+        from ai_service import get_project_cache_key
+        import json
+        
         current_sig = get_project_cache_key(project_id)
-        if current_sig:
-            cached = TRIANGULATION_CACHE.get(project_id)
-            if cached and cached.get('signature') == current_sig:
-                data = cached['data']
+        current_sig_str = json.dumps(current_sig, sort_keys=True) if current_sig else None
+        
+        # 1. Tenter de récupérer le score réel du cache persistant en base de données
+        if current_sig_str and project.cached_triangulation_signature == current_sig_str and project.cached_triangulation_data:
+            try:
+                data = json.loads(project.cached_triangulation_data)
                 return jsonify({
                     'success': True,
                     'avg_sentiment_score': data.get('avg_sentiment_score', 0.0),
                     'sentiment_label': data.get('sentiment_label', 'Neutre')
                 })
+            except Exception as e:
+                app.logger.warning(f"Erreur de lecture du cache DB pour le KPI: {e}")
+        else:
+            # Si le cache est manquant ou expiré, on déclenche le réchauffement en arrière-plan
+            warm_triangulation_cache(project_id)
                 
+        # 2. Si non présent ou expiré, calcul rapide local pour garder un chargement sous les 2ms
         sessions = project.sessions
         if not sessions:
             return jsonify({'success': True, 'avg_sentiment_score': 0.0, 'sentiment_label': 'Neutre'})

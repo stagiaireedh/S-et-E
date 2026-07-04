@@ -182,15 +182,35 @@ def run_project_triangulation(project_id):
     Calcule la triangulation qualitative et quantitative du projet.
     Interroge l'IA en cascade pour générer une synthèse, des risques et des recommandations
     structurées, et bascule sur le mode local en cas d'erreur.
-    Utilise un cache en mémoire invalidé dynamiquement si les données du projet changent.
+    Utilise un cache hybride (mémoire + base de données) pour une réactivité instantanée.
     """
+    from models import Project, db
+    
     # Vérification du cache
     current_sig = get_project_cache_key(project_id)
-    if current_sig:
+    current_sig_str = json.dumps(current_sig, sort_keys=True) if current_sig else None
+    
+    if current_sig_str:
+        # 1. Vérification du cache en mémoire
         cached = TRIANGULATION_CACHE.get(project_id)
-        if cached and cached.get('signature') == current_sig:
-            logger.info(f"Retour de la triangulation depuis le cache pour le projet {project_id}")
+        if cached and cached.get('signature') == current_sig_str:
+            logger.info(f"Retour de la triangulation depuis le cache mémoire pour le projet {project_id}")
             return cached['data']
+            
+        # 2. Vérification du cache en base de données (persistant après redémarrage Vercel)
+        try:
+            project = Project.query.get(project_id)
+            if project and project.cached_triangulation_signature == current_sig_str and project.cached_triangulation_data:
+                logger.info(f"Retour de la triangulation depuis le cache DB pour le projet {project_id}")
+                res_data = json.loads(project.cached_triangulation_data)
+                # Remettre dans le cache mémoire
+                TRIANGULATION_CACHE[project_id] = {
+                    'signature': current_sig_str,
+                    'data': res_data
+                }
+                return res_data
+        except Exception as db_err:
+            logger.warning(f"Erreur de lecture du cache DB pour le projet {project_id} : {db_err}")
 
     sessions = InterviewSession.query.filter_by(project_id=project_id).all()
     if not sessions:
@@ -259,12 +279,23 @@ def run_project_triangulation(project_id):
         # 2. FALLBACK LOCAL (MOCKED/RULE-BASED)
         res_data = _local_run_project_triangulation(project_id, sessions, verbatims_by_actor, all_comments)
 
-    # Enregistrement dans le cache
-    if current_sig and res_data:
+    # Enregistrement dans le cache mémoire et persistance en base de données
+    if current_sig_str and res_data:
+        # Cache mémoire
         TRIANGULATION_CACHE[project_id] = {
-            'signature': current_sig,
+            'signature': current_sig_str,
             'data': res_data
         }
+        # Cache Base de données
+        try:
+            project = Project.query.get(project_id)
+            if project:
+                project.cached_triangulation_data = json.dumps(res_data)
+                project.cached_triangulation_signature = current_sig_str
+                db.session.commit()
+                logger.info(f"Cache de triangulation enregistré en base de données pour le projet {project_id}")
+        except Exception as db_err:
+            logger.warning(f"Erreur d'écriture du cache DB pour le projet {project_id} : {db_err}")
 
     return res_data
 

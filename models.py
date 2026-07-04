@@ -44,6 +44,9 @@ class Project(db.Model):
     questionnaires = db.relationship('Questionnaire', backref='project', lazy=True, cascade="all, delete-orphan")
     sessions = db.relationship('InterviewSession', backref='project', lazy=True, cascade="all, delete-orphan")
     attachments = db.relationship('Attachment', backref='project', lazy=True, cascade="all, delete-orphan")
+    # Cache persistant pour la triangulation de données
+    cached_triangulation_data = db.Column(db.Text, nullable=True)
+    cached_triangulation_signature = db.Column(db.String(255), nullable=True)
 
     def to_dict(self):
         return {
@@ -51,7 +54,8 @@ class Project(db.Model):
             'name': self.name,
             'description': self.description,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'user_id': self.user_id
+            'user_id': self.user_id,
+            'cached_triangulation_signature': self.cached_triangulation_signature
         }
 
 
