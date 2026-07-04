@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let charts = {}; // Stockage des instances de Chart.js pour pouvoir les mettre à jour
     let editingSessionId = null; // Session ID en cours d'édition
     let showAllSessions = false; // Toggle pour afficher tous les entretiens sur le tableau de bord
+    let isTriangulationCacheDirty = true; // Indique si la triangulation doit être recalculée/récupérée du serveur
     
     // --- UTILS : TOASTS & INDICATEURS DE CHARGEMENT ---
     function showToast(message, type = 'success') {
@@ -281,6 +282,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function updateActiveProjectDetails() {
+        isTriangulationCacheDirty = true;
+        analysisDataGlobal = null;
         const proj = projects.find(p => p.id === activeProjectId);
         if (proj) {
             projectTitle.innerText = proj.name;
@@ -403,12 +406,24 @@ document.addEventListener('DOMContentLoaded', () => {
         
         try {
             // Chargements parallèles des KPIs de base, questionnaires et pièces jointes
-            const [sessions, quests, attachments, triang] = await Promise.all([
-                requestAPI(`/api/projects/${activeProjectId}/sessions`),
-                requestAPI(`/api/projects/${activeProjectId}/questionnaires`),
-                requestAPI(`/api/projects/${activeProjectId}/attachments`),
-                requestAPI(`/api/projects/${activeProjectId}/triangulation`, { silent: true })
-            ]);
+            let sessions, quests, attachments, triang;
+            if (analysisDataGlobal !== null && !isTriangulationCacheDirty) {
+                [sessions, quests, attachments] = await Promise.all([
+                    requestAPI(`/api/projects/${activeProjectId}/sessions`),
+                    requestAPI(`/api/projects/${activeProjectId}/questionnaires`),
+                    requestAPI(`/api/projects/${activeProjectId}/attachments`)
+                ]);
+                triang = analysisDataGlobal;
+            } else {
+                [sessions, quests, attachments, triang] = await Promise.all([
+                    requestAPI(`/api/projects/${activeProjectId}/sessions`),
+                    requestAPI(`/api/projects/${activeProjectId}/questionnaires`),
+                    requestAPI(`/api/projects/${activeProjectId}/attachments`),
+                    requestAPI(`/api/projects/${activeProjectId}/triangulation`, { silent: true })
+                ]);
+                analysisDataGlobal = triang;
+                isTriangulationCacheDirty = false;
+            }
             
             document.getElementById('kpi-total-sessions').innerText = sessions.length;
             document.getElementById('kpi-total-questionnaires').innerText = quests.length;
@@ -802,6 +817,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         if (successCount > 0) {
+            isTriangulationCacheDirty = true;
+            analysisDataGlobal = null;
             showToast(`${successCount} fichier(s) joint(s) téléversé(s) avec succès !`, "success");
             await loadDashboardData();
         }
@@ -1240,6 +1257,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify(payload)
             });
             if (result.success) {
+                isTriangulationCacheDirty = true;
+                analysisDataGlobal = null;
                 showToast(isEdit ? "Entretien mis à jour avec succès !" : "Entretien enregistré avec succès !", "success");
                 
                 editingSessionId = null;
@@ -2440,8 +2459,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         try {
-            const data = await requestAPI(`/api/projects/${activeProjectId}/triangulation`, { silent: true });
-            analysisDataGlobal = data;
+            let data;
+            if (analysisDataGlobal !== null && !isTriangulationCacheDirty) {
+                data = analysisDataGlobal;
+                console.log("Utilisation des données de triangulation en cache frontend (0ms).");
+            } else {
+                data = await requestAPI(`/api/projects/${activeProjectId}/triangulation`, { silent: true });
+                analysisDataGlobal = data;
+                isTriangulationCacheDirty = false;
+            }
             
             if (!data.success) {
                 document.getElementById('ai-gauge-sentiment-label').innerText = "-";
@@ -2834,6 +2860,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     const res = await requestAPI(`/api/sessions/${id}`, { method: 'DELETE' });
                     if (res.success) {
+                        isTriangulationCacheDirty = true;
+                        analysisDataGlobal = null;
                         showToast("Entretien supprimé avec succès !", "success");
                     }
                 } catch (err) {
