@@ -172,6 +172,14 @@
                     </svg>
                     Collecte & Saisie
                 </a>
+                <a href="#statistiques" class="nav-item" data-tab="statistiques">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path>
+                        <path d="M22 12A10 10 0 0 0 12 2v10z"></path>
+                    </svg>
+                    Statistiques Pro
+                    <span class="badge-new-feature" style="margin-left: auto; font-size: 10px; background: rgba(99, 102, 241, 0.2); color: #818cf8; padding: 2px 6px; border-radius: 9999px; font-weight: 700;">PRO</span>
+                </a>
                 <a href="#analyse" class="nav-item" data-tab="analyse">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
@@ -524,6 +532,205 @@
                 </div>
             </section>
 
+                        <!-- ================= TAB: STATISTIQUES AVANCÉES PRO ================= -->
+            <section id="tab-statistiques" class="tab-pane">
+                <!-- Toolbar Supérieure Filtres & Exports -->
+                <div class="stats-toolbar card" style="margin-bottom: 24px; padding: 16px 20px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+                        <div class="form-group-inline" style="margin: 0;">
+                            <label for="stats-select-questionnaire" style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-right: 6px;">Questionnaire :</label>
+                            <select id="stats-select-questionnaire" class="custom-select" style="min-width: 220px;">
+                                <option value="all">Tous les questionnaires</option>
+                            </select>
+                        </div>
+                        <div class="form-group-inline" style="margin: 0;">
+                            <label for="stats-select-actor" style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-right: 6px;">Catégorie :</label>
+                            <select id="stats-select-actor" class="custom-select" style="min-width: 170px;">
+                                <option value="all">Toutes les catégories</option>
+                                <option value="Bénéficiaire">Bénéficiaires</option>
+                                <option value="Autorité Locale">Autorités Locales</option>
+                                <option value="Équipe Projet">Équipe Projet</option>
+                                <option value="Partenaire">Partenaires</option>
+                            </select>
+                        </div>
+                        <button id="btn-refresh-stats" class="btn-secondary btn-sm" title="Rafraîchir les statistiques" style="display: inline-flex; align-items: center; gap: 6px;">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                            Actualiser
+                        </button>
+                    </div>
+
+                    <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+                        <button id="btn-open-batch-upload" class="btn-primary btn-sm" style="display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                            📥 Ingestion Massive (PDF / Excel)
+                        </button>
+                        <button id="btn-export-stats-excel" class="btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 6px;">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            Excel Pro Multi-Feuilles
+                        </button>
+                        <button id="btn-export-stats-pdf" class="btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 6px; border-color: rgba(99, 102, 241, 0.4);">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            Rapport PDF Bailleurs
+                        </button>
+                    </div>
+                </div>
+
+                <!-- KPI Grid Statistiques Pro -->
+                <div class="kpi-grid" style="margin-bottom: 24px;">
+                    <div class="kpi-card">
+                        <div class="kpi-icon bg-indigo-soft">
+                            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#6366f1" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="stats-kpi-total-sessions">0</span>
+                            <span class="kpi-label">Formulaires & Entretiens (N)</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon bg-purple-soft">
+                            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#a855f7" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="stats-kpi-total-questions">0</span>
+                            <span class="kpi-label">Questions Analysées</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon bg-cyan-soft">
+                            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#06b6d4" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/></svg>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="stats-kpi-consensus-index">0%</span>
+                            <span class="kpi-label">Indice de Consensus Global</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon bg-pink-soft">
+                            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#ec4899" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="stats-kpi-orientations-count">0</span>
+                            <span class="kpi-label">Orientations Décisionnelles</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Grille des Graphiques HD (Camemberts & Barres de Tris Croisés) -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 24px; margin-bottom: 24px;">
+                    <!-- Graphique 1 : Camembert / Donut Répartition Acteurs -->
+                    <div class="card chart-card" style="min-height: 380px;">
+                        <div class="card-header-flex">
+                            <div>
+                                <h3 style="margin: 0; font-size: 15px; font-weight: 700;">🥧 Répartition des Enquêtés par Profil</h3>
+                                <p class="text-muted" style="margin: 3px 0 0 0; font-size: 12px;">Échantillon global par catégorie d'acteur</p>
+                            </div>
+                            <button class="btn-link" onclick="downloadChartAsPNG('chart-stats-actors', 'repartition_acteurs_csb.png')" style="font-size: 11px;">📷 Télécharger</button>
+                        </div>
+                        <div class="canvas-container" style="position: relative; height: 280px; margin-top: 15px;">
+                            <canvas id="chart-stats-actors"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Graphique 2 : Camembert / Donut par Question Sélectionnée -->
+                    <div class="card chart-card" style="min-height: 380px;">
+                        <div class="card-header-flex">
+                            <div style="flex: 1; min-width: 0; margin-right: 10px;">
+                                <h3 style="margin: 0; font-size: 15px; font-weight: 700;">🎯 Distribution des Réponses (Tri à Plat)</h3>
+                                <select id="stats-select-question-chart" class="custom-select" style="margin-top: 6px; font-size: 12px; width: 100%; max-width: 380px;">
+                                    <!-- Rempli dynamiquement -->
+                                </select>
+                            </div>
+                            <button class="btn-link" onclick="downloadChartAsPNG('chart-stats-question-pie', 'tri_a_plat_question_csb.png')" style="font-size: 11px; white-space: nowrap;">📷 Télécharger</button>
+                        </div>
+                        <div class="canvas-container" style="position: relative; height: 280px; margin-top: 15px;">
+                            <canvas id="chart-stats-question-pie"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Graphique 3 : Barres Groupées / Empilées de Tris Croisés -->
+                <div class="card chart-card" style="margin-bottom: 24px;">
+                    <div class="card-header-flex">
+                        <div>
+                            <h3 style="margin: 0; font-size: 16px; font-weight: 700;">📊 Tris Croisés Multi-Catégories (Comparaison Directe)</h3>
+                            <p class="text-muted" style="margin: 3px 0 0 0; font-size: 12.5px;">Confrontation des taux d'adhésion (%) selon la catégorie d'acteurs pour la question sélectionnée</p>
+                        </div>
+                        <button class="btn-link" onclick="downloadChartAsPNG('chart-stats-crosstab-bar', 'tri_croise_acteurs_csb.png')" style="font-size: 11px;">📷 Télécharger</button>
+                    </div>
+                    <div class="canvas-container" style="position: relative; height: 320px; margin-top: 15px;">
+                        <canvas id="chart-stats-crosstab-bar"></canvas>
+                    </div>
+                </div>
+
+                <!-- Section Tableaux Détaillés : Tri à Plat et Matrice de Tris Croisés -->
+                <div style="display: grid; grid-template-columns: 1fr; gap: 24px; margin-bottom: 24px;">
+                    <!-- Tableau de Tri à Plat Détaillé -->
+                    <div class="card">
+                        <div class="card-header-flex">
+                            <div>
+                                <h3 style="margin: 0; font-size: 15px; font-weight: 700;">📋 Tableau de Fréquences & Statistiques de la Question</h3>
+                                <p id="stats-active-q-desc" class="text-muted" style="margin: 3px 0 0 0; font-size: 12px;">Détail exhaustif des effectifs et fréquences</p>
+                            </div>
+                        </div>
+                        <div class="table-container" style="margin-top: 15px;">
+                            <table class="custom-table" id="table-stats-tri-plat">
+                                <thead>
+                                    <tr>
+                                        <th>Modalité / Option de Réponse</th>
+                                        <th style="text-align: right;">Effectif (N)</th>
+                                        <th style="text-align: right;">Fréquence (%)</th>
+                                        <th style="min-width: 180px;">Répartition Visuelle</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Rempli en JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="stats-numeric-summary" style="margin-top: 12px; display: none;" class="badge-tag"></div>
+                    </div>
+
+                    <!-- Matrice de Tri Croisé Dynamique -->
+                    <div class="card">
+                        <div class="card-header-flex">
+                            <div>
+                                <h3 style="margin: 0; font-size: 15px; font-weight: 700;">🔄 Matrice de Tri Croisé (Réponses x Catégories d'Acteurs)</h3>
+                                <p class="text-muted" style="margin: 3px 0 0 0; font-size: 12px;">Mise en lumière des consensus et des fractures de perception</p>
+                            </div>
+                        </div>
+                        <div class="table-container" style="margin-top: 15px; overflow-x: auto;">
+                            <table class="custom-table" id="table-stats-crosstab">
+                                <thead id="table-stats-crosstab-head">
+                                    <!-- Rempli en JS -->
+                                </thead>
+                                <tbody id="table-stats-crosstab-body">
+                                    <!-- Rempli en JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="stats-divergences-container" style="margin-top: 15px; display: flex; flex-direction: column; gap: 8px;">
+                            <!-- Alertes de divergences injectées en JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section Orientations Stratégiques & Aide à la Décision -->
+                <div class="card" style="margin-bottom: 24px;">
+                    <div class="card-header-flex">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span class="badge-ai" style="padding: 4px 10px; font-size: 11px;">M&E STRATÉGIQUE</span>
+                            <h3 style="margin: 0; font-size: 16px; font-weight: 700;">Orientations Stratégiques & Plan d'Action (IA Décisionnelle)</h3>
+                        </div>
+                    </div>
+                    <p class="text-muted" style="margin: 8px 0 16px 0; font-size: 13px;">
+                        Orientations prioritaires formulées automatiquement sur la base des signaux quantitatifs et de la triangulation qualitative des acteurs.
+                    </p>
+                    <div id="stats-orientations-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;">
+                        <!-- Rempli en JS -->
+                    </div>
+                </div>
+            </section>
+
             <!-- ================= TAB: ASSISTANT IA ================= -->
             <section id="tab-assistant" class="tab-pane">
                 <div class="card assistant-chat-card">
@@ -866,6 +1073,97 @@
             
             <div class="form-actions" style="margin-top: 15px;">
                 <button type="button" class="btn-secondary w-100" id="btn-close-share-panel">Fermer</button>
+            </div>
+        </div>
+    </div>
+
+        <!-- ================= MODAL INGESTION MASSIVE (PDF & EXCEL) ================= -->
+    <div class="modal-overlay" id="modal-batch-ingestion">
+        <div class="modal-card" style="max-width: 680px;">
+            <div class="modal-header">
+                <div>
+                    <h2 style="margin: 0; font-size: 18px; font-weight: 700;">📥 Ingestion Massive de Formulaires</h2>
+                    <p class="text-muted" style="margin: 4px 0 0 0; font-size: 12px;">Traitez des dizaines ou centaines de formulaires PDF ou fichiers Excel en quelques secondes</p>
+                </div>
+                <button class="modal-close" id="btn-close-batch-modal">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 20px 24px;">
+                <!-- Onglets du modal -->
+                <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+                    <button id="tab-btn-batch-pdf" class="btn-primary btn-sm" style="flex: 1;">📄 Formulaires PDF en Masse</button>
+                    <button id="tab-btn-batch-excel" class="btn-secondary btn-sm" style="flex: 1;">📊 Fichier Excel / CSV en Masse</button>
+                </div>
+
+                <!-- Sélecteur du Questionnaire Cible -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                    <label style="font-weight: 600; font-size: 13px;">Questionnaire cible pour l'attribution des données :</label>
+                    <select id="batch-target-questionnaire-select" class="custom-select" style="width: 100%; margin-top: 5px;">
+                        <!-- Rempli dynamiquement -->
+                    </select>
+                </div>
+
+                <!-- Contenu Onglet PDF -->
+                <div id="batch-pane-pdf">
+                    <div class="file-drop-zone" id="batch-pdf-drop-zone" style="border: 2px dashed rgba(99, 102, 241, 0.4); border-radius: 12px; padding: 30px; text-align: center; cursor: pointer; transition: all 0.2s ease;">
+                        <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="#6366f1" stroke-width="1.8" style="margin-bottom: 10px;">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
+                        </svg>
+                        <h4 style="margin: 0 0 6px 0; font-size: 15px;">Glissez-déposez vos fichiers PDF ici</h4>
+                        <p class="text-muted" style="margin: 0; font-size: 12.5px;">Sélectionnez plusieurs fichiers à la fois (10, 50, 100+ PDF)</p>
+                        <input type="file" id="batch-pdf-input" accept=".pdf" multiple style="display: none;">
+                    </div>
+                    <div id="batch-pdf-selected-info" style="margin-top: 12px; font-size: 13px; font-weight: 600; color: #6366f1; display: none;"></div>
+                    
+                    <div id="batch-pdf-progress-container" style="display: none; margin-top: 15px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px;">
+                            <span id="batch-progress-label">Traitement en cours...</span>
+                            <span id="batch-progress-pct">0%</span>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.1); border-radius: 9999px; height: 8px; overflow: hidden;">
+                            <div id="batch-progress-bar" style="background: linear-gradient(90deg, #4f46e5, #06b6d4); height: 100%; width: 0%; transition: width 0.3s ease;"></div>
+                        </div>
+                    </div>
+
+                    <div id="batch-pdf-results-box" style="display: none; margin-top: 16px; padding: 14px; border-radius: 8px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3);">
+                        <p id="batch-pdf-results-msg" style="margin: 0; font-size: 13px; font-weight: 600; color: #10b981;"></p>
+                    </div>
+
+                    <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                        <button type="button" class="btn-secondary" id="btn-cancel-batch-pdf">Annuler</button>
+                        <button type="button" class="btn-primary" id="btn-start-batch-pdf-upload" style="background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                            🚀 Lancer l'Extraction & Ingestion
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Contenu Onglet Excel -->
+                <div id="batch-pane-excel" style="display: none;">
+                    <div style="background: rgba(99, 102, 241, 0.08); border-radius: 10px; padding: 14px 18px; margin-bottom: 16px; border: 1px solid rgba(99, 102, 241, 0.2);">
+                        <h4 style="margin: 0 0 6px 0; font-size: 14px; color: #6366f1;">💡 Saisie rapide dans Excel</h4>
+                        <p style="margin: 0 0 10px 0; font-size: 12px; color: var(--text-muted);">
+                            Téléchargez le modèle Excel pré-configuré avec toutes les questions du questionnaire sélectionné, remplissez vos centaines de lignes, puis réimportez-le ici.
+                        </p>
+                        <button type="button" class="btn-secondary btn-sm" id="btn-download-excel-template" style="display: inline-flex; align-items: center; gap: 6px;">
+                            📥 Télécharger le Modèle Excel de Saisie
+                        </button>
+                    </div>
+
+                    <div class="file-drop-zone" id="batch-excel-drop-zone" style="border: 2px dashed rgba(16, 185, 129, 0.4); border-radius: 12px; padding: 25px; text-align: center; cursor: pointer;">
+                        <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="#10b981" stroke-width="1.8" style="margin-bottom: 10px;">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/>
+                        </svg>
+                        <h4 style="margin: 0 0 6px 0; font-size: 15px;">Sélectionnez votre fichier Excel (.xlsx, .xls, .csv)</h4>
+                        <input type="file" id="batch-excel-input" accept=".xlsx,.xls,.csv" style="display: none;">
+                    </div>
+                    <div id="batch-excel-selected-info" style="margin-top: 10px; font-size: 13px; font-weight: 600; color: #10b981; display: none;"></div>
+
+                    <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                        <button type="button" class="btn-secondary" id="btn-cancel-batch-excel">Annuler</button>
+                        <button type="button" class="btn-primary" id="btn-start-batch-excel-upload" style="background: linear-gradient(135deg, #10b981, #059669);">
+                            📊 Importer les Données Excel
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

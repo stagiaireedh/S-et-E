@@ -226,6 +226,8 @@ document.addEventListener('DOMContentLoaded', () => {
             loadQuestionnairesList();
         } else if (tabId === 'analyse') {
             loadTriangulationData();
+        } else if (tabId === 'statistiques') {
+            loadAdvancedStatistics();
         }
     }
     
@@ -3334,8 +3336,772 @@ document.addEventListener('DOMContentLoaded', () => {
             loadQuestionnairesList();
         } else if (activeTab === 'analyse') {
             loadTriangulationData();
+        } else if (activeTab === 'statistiques') {
+            loadAdvancedStatistics();
         }
     });
+
+
+    // --- 16. MODULE STATISTIQUES AVANCÉES PRO & INGESTION MASSIVE ---
+    let currentStatsData = null;
+    let selectedBatchFiles = [];
+    let selectedBatchExcelFile = null;
+
+    // Fonction globale pour télécharger les graphiques en PNG
+    window.downloadChartAsPNG = function(canvasId, filename) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        const link = document.createElement('a');
+        link.download = filename || 'graphique_csb.png';
+        link.href = canvas.toDataURL('image/png', 1.0);
+        link.click();
+    };
+
+    async function loadAdvancedStatistics(forceReload = false) {
+        if (!activeProjectId) {
+            console.warn("loadAdvancedStatistics: Aucun projet actif.");
+            return;
+        }
+
+        const questSelect = document.getElementById('stats-select-questionnaire');
+        const actorSelect = document.getElementById('stats-select-actor');
+        const selectedQ = (questSelect && questSelect.value !== 'all') ? questSelect.value : '';
+        const selectedActor = (actorSelect && actorSelect.value !== 'all') ? actorSelect.value : '';
+
+        showLoader();
+        try {
+            let url = `/api/projects/${activeProjectId}/statistics?`;
+            if (selectedQ) url += `questionnaire_id=${selectedQ}&`;
+            if (selectedActor) url += `actor=${encodeURIComponent(selectedActor)}&`;
+
+            const res = await requestAPI(url, { bypassCache: forceReload });
+            if (!res || !res.success || !res.data) {
+                showToast("Impossible de charger les statistiques.", "error");
+                return;
+            }
+
+            currentStatsData = res.data;
+            renderStatisticsDashboard(currentStatsData);
+        } catch (err) {
+            console.error("Erreur lors du chargement des statistiques :", err);
+            showToast("Erreur lors du calcul des statistiques : " + err.message, "error");
+        } finally {
+            hideLoader();
+        }
+    }
+
+    function renderStatisticsDashboard(stats) {
+        // 1. Mettre à jour les listes déroulantes de questionnaires si nécessaire
+        const questSelect = document.getElementById('stats-select-questionnaire');
+        const batchQuestSelect = document.getElementById('batch-target-questionnaire-select');
+        
+        if (questSelect && questionnaires && questionnaires.length > 0) {
+            const curVal = questSelect.value;
+            let optionsHtml = '<option value="all">Tous les questionnaires</option>';
+            let batchOptionsHtml = '';
+            questionnaires.forEach(q => {
+                optionsHtml += `<option value="${q.id}">${q.title}</option>`;
+                batchOptionsHtml += `<option value="${q.id}">${q.title}</option>`;
+            });
+            questSelect.innerHTML = optionsHtml;
+            if (curVal) questSelect.value = curVal;
+            if (batchQuestSelect) batchQuestSelect.innerHTML = batchOptionsHtml;
+        }
+
+        // 2. KPIs
+        const kpiSessions = document.getElementById('stats-kpi-total-sessions');
+        const kpiQuestions = document.getElementById('stats-kpi-total-questions');
+        const kpiConsensus = document.getElementById('stats-kpi-consensus-index');
+        const kpiOrientations = document.getElementById('stats-kpi-orientations-count');
+
+        if (kpiSessions) kpiSessions.textContent = stats.total_sessions || 0;
+        if (kpiQuestions) kpiQuestions.textContent = stats.questions_stats ? stats.questions_stats.length : 0;
+        if (kpiConsensus) kpiConsensus.textContent = `${stats.global_consensus_index || 0}%`;
+        if (kpiOrientations) kpiOrientations.textContent = stats.orientations ? stats.orientations.length : 0;
+
+        // 3. Graphique 1 : Répartition des Enquêtés par Profil (Camembert/Donut HD)
+        renderActorsDonutChart(stats.actors_distribution || []);
+
+        // 4. Peupler le sélecteur de questions pour le graphique de question
+        const qChartSelect = document.getElementById('stats-select-question-chart');
+        if (qChartSelect && stats.questions_stats && stats.questions_stats.length > 0) {
+            const currentSelectedQId = qChartSelect.value;
+            let qOptions = '';
+            stats.questions_stats.forEach((qs, idx) => {
+                qOptions += `<option value="${qs.question_id}">Q${idx + 1}. ${qs.question_text.substring(0, 70)}...</option>`;
+            });
+            qChartSelect.innerHTML = qOptions;
+            if (currentSelectedQId && stats.questions_stats.some(qs => qs.question_id == currentSelectedQId)) {
+                qChartSelect.value = currentSelectedQId;
+            }
+            // Rendre les détails pour la question sélectionnée
+            renderSelectedQuestionStats(qChartSelect.value);
+        } else {
+            if (qChartSelect) qChartSelect.innerHTML = '<option value="">Aucune question analysable</option>';
+            clearSelectedQuestionViews();
+        }
+
+        // 5. Orientations Stratégiques (IA & M&E)
+        renderStrategicOrientations(stats.orientations || []);
+    }
+
+    function renderActorsDonutChart(actorsData) {
+        const ctx = document.getElementById('chart-stats-actors');
+        if (!ctx) return;
+
+        if (charts['stats-actors']) {
+            charts['stats-actors'].destroy();
+        }
+
+        const labels = actorsData.map(a => a.label);
+        const dataValues = actorsData.map(a => a.count);
+        const bgColors = actorsData.map(a => a.color);
+        const borderColors = actorsData.map(a => a.border_color);
+
+        if (dataValues.length === 0 || dataValues.every(v => v === 0)) {
+            // Placeholder vide
+            charts['stats-actors'] = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Aucune donnée'],
+                    datasets: [{ data: [1], backgroundColor: ['rgba(148, 163, 184, 0.3)'] }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+            return;
+        }
+
+        charts['stats-actors'] = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: dataValues,
+                    backgroundColor: bgColors,
+                    borderColor: borderColors,
+                    borderWidth: 2,
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            color: getComputedStyle(document.body).getPropertyValue('--text-color') || '#e2e8f0',
+                            font: { family: "'Outfit', sans-serif", size: 12, weight: '500' },
+                            padding: 14
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const val = context.raw || 0;
+                                const pct = total > 0 ? Math.round((val / total) * 100) : 0;
+                                return ` ${context.label}: ${val} répondant(s) (${pct}%)`;
+                            }
+                        }
+                    }
+                },
+                cutout: '55%'
+            }
+        });
+    }
+
+    function renderSelectedQuestionStats(questionId) {
+        if (!currentStatsData || !currentStatsData.questions_stats) return;
+        const qStats = currentStatsData.questions_stats.find(qs => qs.question_id == questionId) || currentStatsData.questions_stats[0];
+        if (!qStats) {
+            clearSelectedQuestionViews();
+            return;
+        }
+
+        // Description sous le tableau
+        const descEl = document.getElementById('stats-active-q-desc');
+        if (descEl) descEl.textContent = `Question : "${qStats.question_text}" (Total répondants : N = ${qStats.total_answers})`;
+
+        // 1. Graphique 2 : Camembert / Donut HD de Tri à Plat
+        const ctxPie = document.getElementById('chart-stats-question-pie');
+        if (ctxPie) {
+            if (charts['stats-question-pie']) charts['stats-question-pie'].destroy();
+
+            const labels = qStats.tri_a_plat.map(t => t.label);
+            const counts = qStats.tri_a_plat.map(t => t.count);
+            const bgs = qStats.tri_a_plat.map(t => t.color);
+            const borders = qStats.tri_a_plat.map(t => t.border_color);
+
+            charts['stats-question-pie'] = new Chart(ctxPie, {
+                type: (qStats.recommended_chart_type === 'bar') ? 'bar' : 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Effectif',
+                        data: counts,
+                        backgroundColor: bgs,
+                        borderColor: borders,
+                        borderWidth: 2,
+                        hoverOffset: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: getComputedStyle(document.body).getPropertyValue('--text-color') || '#e2e8f0',
+                                font: { family: "'Outfit', sans-serif", size: 11 },
+                                padding: 10
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const val = context.raw || 0;
+                                    const total = qStats.total_answers || 1;
+                                    const pct = Math.round((val / total) * 100);
+                                    return ` ${context.label}: ${val} (${pct}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 2. Graphique 3 : Barres Groupées / Empilées de Tris Croisés (Acteurs x Réponses)
+        const ctxBar = document.getElementById('chart-stats-crosstab-bar');
+        if (ctxBar) {
+            if (charts['stats-crosstab-bar']) charts['stats-crosstab-bar'].destroy();
+
+            const ct = qStats.cross_tabulation;
+            const actors = ct.actors || [];
+            const modalities = qStats.tri_a_plat.map(t => t.label).slice(0, 8); // Top 8 modalités
+
+            const actorColors = {
+                'Bénéficiaire': { bg: 'rgba(99, 102, 241, 0.85)', border: '#6366f1' },
+                'Autorité Locale': { bg: 'rgba(16, 185, 129, 0.85)', border: '#10b981' },
+                'Équipe Projet': { bg: 'rgba(245, 158, 11, 0.85)', border: '#f59e0b' },
+                'Partenaire': { bg: 'rgba(236, 72, 153, 0.85)', border: '#ec4899' }
+            };
+
+            const defaultPalette = [
+                { bg: 'rgba(99, 102, 241, 0.85)', border: '#6366f1' },
+                { bg: 'rgba(16, 185, 129, 0.85)', border: '#10b981' },
+                { bg: 'rgba(245, 158, 11, 0.85)', border: '#f59e0b' },
+                { bg: 'rgba(236, 72, 153, 0.85)', border: '#ec4899' },
+                { bg: 'rgba(6, 182, 212, 0.85)', border: '#06b6d4' }
+            ];
+
+            const datasets = actors.map((act, idx) => {
+                const colorConfig = actorColors[act] || defaultPalette[idx % defaultPalette.length];
+                const dataPcts = modalities.map(mod => {
+                    const row = ct.matrix.find(r => r.modality === mod);
+                    return row ? (row.percentages[act] || 0) : 0;
+                });
+                return {
+                    label: act,
+                    data: dataPcts,
+                    backgroundColor: colorConfig.bg,
+                    borderColor: colorConfig.border,
+                    borderWidth: 1.5,
+                    borderRadius: 4
+                };
+            });
+
+            charts['stats-crosstab-bar'] = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: modalities,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: val => `${val}%`,
+                                color: getComputedStyle(document.body).getPropertyValue('--text-muted') || '#94a3b8'
+                            },
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' }
+                        },
+                        x: {
+                            ticks: {
+                                color: getComputedStyle(document.body).getPropertyValue('--text-muted') || '#94a3b8',
+                                font: { size: 11 }
+                            },
+                            grid: { display: false }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                color: getComputedStyle(document.body).getPropertyValue('--text-color') || '#e2e8f0',
+                                font: { family: "'Outfit', sans-serif", size: 12, weight: '600' }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: context => ` ${context.dataset.label}: ${context.raw}% des enquêtés`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 3. Tableau de Fréquences (Tri à Plat)
+        const tableBody = document.querySelector('#table-stats-tri-plat tbody');
+        if (tableBody) {
+            tableBody.innerHTML = '';
+            qStats.tri_a_plat.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="font-weight: 500;">${item.label}</td>
+                    <td style="text-align: right; font-weight: 600;">${item.count}</td>
+                    <td style="text-align: right; font-weight: 700; color: #6366f1;">${item.percentage}%</td>
+                    <td>
+                        <div style="background: rgba(255, 255, 255, 0.1); border-radius: 9999px; height: 7px; overflow: hidden; width: 100%;">
+                            <div style="width: ${item.percentage}%; background: ${item.border_color}; height: 100%; border-radius: 9999px;"></div>
+                        </div>
+                    </td>
+                `;
+                tableBody.appendChild(tr);
+            });
+        }
+
+        // Résumé numérique si disponible
+        const numSummary = document.getElementById('stats-numeric-summary');
+        if (numSummary) {
+            if (qStats.numeric_stats) {
+                const ns = qStats.numeric_stats;
+                numSummary.style.display = 'block';
+                numSummary.innerHTML = `📊 <strong>Statistiques Descriptives :</strong> Moyenne = <strong>${ns.mean}</strong> | Médiane = <strong>${ns.median}</strong> | Écart-type = <strong>${ns.std_dev}</strong> (Min: ${ns.min}, Max: ${ns.max})`;
+            } else {
+                numSummary.style.display = 'none';
+            }
+        }
+
+        // 4. Matrice de Tris Croisés (HTML Table)
+        const ctHead = document.getElementById('table-stats-crosstab-head');
+        const ctBody = document.getElementById('table-stats-crosstab-body');
+        if (ctHead && ctBody) {
+            const ct = qStats.cross_tabulation;
+            const actors = ct.actors || [];
+
+            let headHtml = '<tr><th>Modalité</th>';
+            actors.forEach(act => {
+                headHtml += `<th style="text-align: center;" colspan="2">${act}</th>`;
+            });
+            headHtml += '</tr><tr><th></th>';
+            actors.forEach(() => {
+                headHtml += '<th style="text-align: right; font-size: 11px; opacity: 0.7;">N</th><th style="text-align: right; font-size: 11px; opacity: 0.7;">%</th>';
+            });
+            headHtml += '</tr>';
+            ctHead.innerHTML = headHtml;
+
+            ctBody.innerHTML = '';
+            ct.matrix.forEach(row => {
+                const tr = document.createElement('tr');
+                let rowHtml = `<td style="font-weight: 500;">${row.modality}</td>`;
+                actors.forEach(act => {
+                    const cnt = row.counts[act] || 0;
+                    const pct = row.percentages[act] || 0;
+                    rowHtml += `<td style="text-align: right; font-weight: 500;">${cnt}</td>`;
+                    rowHtml += `<td style="text-align: right; font-weight: 700; color: #10b981;">${pct}%</td>`;
+                });
+                tr.innerHTML = rowHtml;
+                ctBody.appendChild(tr);
+            });
+        }
+
+        // Divergences notables
+        const divContainer = document.getElementById('stats-divergences-container');
+        if (divContainer) {
+            divContainer.innerHTML = '';
+            if (qStats.divergences && qStats.divergences.length > 0) {
+                qStats.divergences.forEach(div => {
+                    const card = document.createElement('div');
+                    card.style.cssText = 'background: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; padding: 10px 14px; border-radius: 6px; font-size: 12.5px; color: #f87171;';
+                    card.innerHTML = `<strong>⚠️ Alerte Divergence de Perception :</strong> ${div}`;
+                    divContainer.appendChild(card);
+                });
+            }
+        }
+    }
+
+    function clearSelectedQuestionViews() {
+        const descEl = document.getElementById('stats-active-q-desc');
+        if (descEl) descEl.textContent = 'Aucune question sélectionnée.';
+        const tableBody = document.querySelector('#table-stats-tri-plat tbody');
+        if (tableBody) tableBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">Aucune donnée disponible.</td></tr>';
+        const ctBody = document.getElementById('table-stats-crosstab-body');
+        if (ctBody) ctBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Aucune donnée.</td></tr>';
+    }
+
+    function renderStrategicOrientations(orientations) {
+        const grid = document.getElementById('stats-orientations-grid');
+        if (!grid) return;
+        grid.innerHTML = '';
+
+        if (!orientations || orientations.length === 0) {
+            grid.innerHTML = '<p class="text-muted text-center py-4" style="grid-column: 1 / -1;">Aucune orientation stratégique générée.</p>';
+            return;
+        }
+
+        orientations.forEach((ori, idx) => {
+            const prio = ori.priorite || 'Moyenne';
+            let prioColor = '#f59e0b';
+            let prioBg = 'rgba(245, 158, 11, 0.15)';
+            if (prio === 'Haute') {
+                prioColor = '#ef4444';
+                prioBg = 'rgba(239, 68, 68, 0.15)';
+            } else if (prio === 'Surveillance') {
+                prioColor = '#06b6d4';
+                prioBg = 'rgba(6, 182, 212, 0.15)';
+            }
+
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.style.cssText = 'background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(255, 255, 255, 0.08); padding: 18px; border-radius: 12px; display: flex; flex-direction: column; justify-content: space-between;';
+            card.innerHTML = `
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+                        <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; background: ${prioBg}; color: ${prioColor}; padding: 3px 8px; border-radius: 9999px;">
+                            Priorité ${prio}
+                        </span>
+                        <span style="font-size: 11px; opacity: 0.6;">Axe #${idx + 1}</span>
+                    </div>
+                    <h4 style="margin: 0 0 10px 0; font-size: 15px; font-weight: 700; color: #f1f5f9;">${ori.titre || 'Orientation Stratégique'}</h4>
+                    <p style="margin: 0 0 12px 0; font-size: 12.5px; color: var(--text-muted); line-height: 1.5;">
+                        <strong style="color: #cbd5e1;">Constat chiffré :</strong> ${ori.constat_chiffre || ''}
+                    </p>
+                    <div style="background: rgba(99, 102, 241, 0.08); border-left: 3px solid #6366f1; padding: 10px 12px; border-radius: 4px; margin-bottom: 12px;">
+                        <p style="margin: 0; font-size: 12.5px; color: #e2e8f0; line-height: 1.4;">
+                            <strong style="color: #818cf8;">Action terrain :</strong> ${ori.action_recommandee || ''}
+                        </p>
+                    </div>
+                </div>
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.06); font-size: 11.5px; color: #10b981; display: flex; align-items: center; gap: 6px;">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    <span><strong>Indicateur M&E :</strong> ${ori.indicateur_suivi || 'À définir'}</span>
+                </div>
+            `;
+            grid.appendChild(card);
+        });
+    }
+
+    // Écouteurs d'événements pour le module Statistiques
+    const qChartSelect = document.getElementById('stats-select-question-chart');
+    if (qChartSelect) {
+        qChartSelect.addEventListener('change', (e) => {
+            renderSelectedQuestionStats(e.target.value);
+        });
+    }
+
+    const btnRefreshStats = document.getElementById('btn-refresh-stats');
+    if (btnRefreshStats) {
+        btnRefreshStats.addEventListener('click', () => {
+            loadAdvancedStatistics(true);
+        });
+    }
+
+    const questSelectFilter = document.getElementById('stats-select-questionnaire');
+    if (questSelectFilter) {
+        questSelectFilter.addEventListener('change', () => {
+            loadAdvancedStatistics(true);
+        });
+    }
+
+    const actorSelectFilter = document.getElementById('stats-select-actor');
+    if (actorSelectFilter) {
+        actorSelectFilter.addEventListener('change', () => {
+            loadAdvancedStatistics(true);
+        });
+    }
+
+    // Boutons Exports Statistiques Pro
+    const btnExportStatsExcel = document.getElementById('btn-export-stats-excel');
+    if (btnExportStatsExcel) {
+        btnExportStatsExcel.addEventListener('click', () => {
+            if (!activeProjectId) return;
+            const qId = questSelectFilter ? questSelectFilter.value : '';
+            const qParam = (qId && qId !== 'all') ? `?questionnaire_id=${qId}` : '';
+            window.open(`/api/projects/${activeProjectId}/statistics/export/excel${qParam}`, '_blank');
+        });
+    }
+
+    const btnExportStatsPdf = document.getElementById('btn-export-stats-pdf');
+    if (btnExportStatsPdf) {
+        btnExportStatsPdf.addEventListener('click', () => {
+            if (!activeProjectId) return;
+            const qId = questSelectFilter ? questSelectFilter.value : '';
+            const qParam = (qId && qId !== 'all') ? `?questionnaire_id=${qId}` : '';
+            window.open(`/api/projects/${activeProjectId}/statistics/export/pdf${qParam}`, '_blank');
+        });
+    }
+
+    // --- GESTION DU MODAL D'INGESTION MASSIVE (PDF & EXCEL) ---
+    const modalBatch = document.getElementById('modal-batch-ingestion');
+    const btnOpenBatch = document.getElementById('btn-open-batch-upload');
+    const btnCloseBatch = document.getElementById('btn-close-batch-modal');
+    const btnCancelBatchPdf = document.getElementById('btn-cancel-batch-pdf');
+    const btnCancelBatchExcel = document.getElementById('btn-cancel-batch-excel');
+
+    const tabBtnBatchPdf = document.getElementById('tab-btn-batch-pdf');
+    const tabBtnBatchExcel = document.getElementById('tab-btn-batch-excel');
+    const batchPanePdf = document.getElementById('batch-pane-pdf');
+    const batchPaneExcel = document.getElementById('batch-pane-excel');
+
+    if (btnOpenBatch && modalBatch) {
+        btnOpenBatch.addEventListener('click', () => {
+            const bSelect = document.getElementById('batch-target-questionnaire-select');
+            if (bSelect && questionnaires) {
+                bSelect.innerHTML = questionnaires.map(q => `<option value="${q.id}">${q.title}</option>`).join('');
+            }
+            selectedBatchFiles = [];
+            selectedBatchExcelFile = null;
+            const pdfInfo = document.getElementById('batch-pdf-selected-info');
+            if (pdfInfo) { pdfInfo.style.display = 'none'; pdfInfo.textContent = ''; }
+            const excelInfo = document.getElementById('batch-excel-selected-info');
+            if (excelInfo) { excelInfo.style.display = 'none'; excelInfo.textContent = ''; }
+            const progress = document.getElementById('batch-pdf-progress-container');
+            if (progress) progress.style.display = 'none';
+            const resBox = document.getElementById('batch-pdf-results-box');
+            if (resBox) resBox.style.display = 'none';
+
+            modalBatch.style.display = 'flex';
+        });
+    }
+
+    function closeBatchModal() {
+        if (modalBatch) modalBatch.style.display = 'none';
+    }
+    if (btnCloseBatch) btnCloseBatch.addEventListener('click', closeBatchModal);
+    if (btnCancelBatchPdf) btnCancelBatchPdf.addEventListener('click', closeBatchModal);
+    if (btnCancelBatchExcel) btnCancelBatchExcel.addEventListener('click', closeBatchModal);
+
+    // Onglets Modal
+    if (tabBtnBatchPdf && tabBtnBatchExcel) {
+        tabBtnBatchPdf.addEventListener('click', () => {
+            tabBtnBatchPdf.className = 'btn-primary btn-sm';
+            tabBtnBatchExcel.className = 'btn-secondary btn-sm';
+            if (batchPanePdf) batchPanePdf.style.display = 'block';
+            if (batchPaneExcel) batchPaneExcel.style.display = 'none';
+        });
+        tabBtnBatchExcel.addEventListener('click', () => {
+            tabBtnBatchExcel.className = 'btn-primary btn-sm';
+            tabBtnBatchPdf.className = 'btn-secondary btn-sm';
+            if (batchPanePdf) batchPanePdf.style.display = 'none';
+            if (batchPaneExcel) batchPaneExcel.style.display = 'block';
+        });
+    }
+
+    // Gestion Drag & Drop PDF
+    const pdfDropZone = document.getElementById('batch-pdf-drop-zone');
+    const pdfInput = document.getElementById('batch-pdf-input');
+    const pdfSelectedInfo = document.getElementById('batch-pdf-selected-info');
+
+    if (pdfDropZone && pdfInput) {
+        pdfDropZone.addEventListener('click', () => pdfInput.click());
+        pdfInput.addEventListener('change', (e) => {
+            handleSelectedPDFs(Array.from(e.target.files));
+        });
+
+        pdfDropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            pdfDropZone.style.borderColor = '#6366f1';
+            pdfDropZone.style.background = 'rgba(99, 102, 241, 0.1)';
+        });
+        pdfDropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            pdfDropZone.style.borderColor = 'rgba(99, 102, 241, 0.4)';
+            pdfDropZone.style.background = 'transparent';
+        });
+        pdfDropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            pdfDropZone.style.borderColor = 'rgba(99, 102, 241, 0.4)';
+            pdfDropZone.style.background = 'transparent';
+            if (e.dataTransfer && e.dataTransfer.files) {
+                handleSelectedPDFs(Array.from(e.dataTransfer.files));
+            }
+        });
+    }
+
+    function handleSelectedPDFs(files) {
+        const validPDFs = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+        if (validPDFs.length === 0) {
+            showToast("Veuillez sélectionner des fichiers au format PDF.", "warning");
+            return;
+        }
+        selectedBatchFiles = validPDFs;
+        if (pdfSelectedInfo) {
+            pdfSelectedInfo.style.display = 'block';
+            pdfSelectedInfo.textContent = `✓ ${validPDFs.length} formulaire(s) PDF prêt(s) pour l'ingestion massive.`;
+        }
+    }
+
+    // Lancement Upload & Extraction Massive PDF
+    const btnStartBatchPdf = document.getElementById('btn-start-batch-pdf-upload');
+    if (btnStartBatchPdf) {
+        btnStartBatchPdf.addEventListener('click', async () => {
+            if (!activeProjectId) {
+                showToast("Veuillez sélectionner un projet actif.", "warning");
+                return;
+            }
+            if (!selectedBatchFiles || selectedBatchFiles.length === 0) {
+                showToast("Veuillez d'abord sélectionner un ou plusieurs fichiers PDF.", "warning");
+                return;
+            }
+
+            const qSelect = document.getElementById('batch-target-questionnaire-select');
+            const qId = qSelect ? qSelect.value : null;
+            if (!qId) {
+                showToast("Veuillez sélectionner le questionnaire cible.", "warning");
+                return;
+            }
+
+            const progressContainer = document.getElementById('batch-pdf-progress-container');
+            const progressBar = document.getElementById('batch-progress-bar');
+            const progressPct = document.getElementById('batch-progress-pct');
+            const progressLabel = document.getElementById('batch-progress-label');
+            const resultsBox = document.getElementById('batch-pdf-results-box');
+            const resultsMsg = document.getElementById('batch-pdf-results-msg');
+
+            if (progressContainer) progressContainer.style.display = 'block';
+            if (progressBar) progressBar.style.width = '30%';
+            if (progressPct) progressPct.textContent = '30%';
+            if (progressLabel) progressLabel.textContent = `Extraction et analyse IA de ${selectedBatchFiles.length} formulaire(s)...`;
+            btnStartBatchPdf.disabled = true;
+
+            const formData = new FormData();
+            formData.append('questionnaire_id', qId);
+            selectedBatchFiles.forEach(f => {
+                formData.append('pdf_files', f);
+            });
+
+            try {
+                if (progressBar) progressBar.style.width = '65%';
+                if (progressPct) progressPct.textContent = '65%';
+
+                const response = await fetch(`/api/projects/${activeProjectId}/batch-upload-pdf`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (progressBar) progressBar.style.width = '100%';
+                if (progressPct) progressPct.textContent = '100%';
+
+                if (data.success) {
+                    showToast(data.message, "success");
+                    if (resultsBox && resultsMsg) {
+                        resultsBox.style.display = 'block';
+                        resultsMsg.innerHTML = `🎉 <strong>Succès !</strong> ${data.message}`;
+                    }
+                    document.dispatchEvent(new CustomEvent('dataChanged', { detail: 'batch-pdf-imported' }));
+                    setTimeout(() => {
+                        closeBatchModal();
+                        loadAdvancedStatistics(true);
+                    }, 1800);
+                } else {
+                    showToast(data.message || "Erreur lors de l'ingestion.", "error");
+                }
+            } catch (err) {
+                console.error("Erreur ingestion massive PDF :", err);
+                showToast("Erreur lors de l'ingestion massive : " + err.message, "error");
+            } finally {
+                btnStartBatchPdf.disabled = false;
+            }
+        });
+    }
+
+    // Gestion Drag & Drop Excel
+    const excelDropZone = document.getElementById('batch-excel-drop-zone');
+    const excelInput = document.getElementById('batch-excel-input');
+    const excelSelectedInfo = document.getElementById('batch-excel-selected-info');
+    const btnDownloadExcelTemplate = document.getElementById('btn-download-excel-template');
+
+    if (btnDownloadExcelTemplate) {
+        btnDownloadExcelTemplate.addEventListener('click', () => {
+            const qSelect = document.getElementById('batch-target-questionnaire-select');
+            const qId = qSelect ? qSelect.value : null;
+            if (!qId) {
+                showToast("Veuillez sélectionner un questionnaire cible.", "warning");
+                return;
+            }
+            window.open(`/api/questionnaires/${qId}/batch-template-excel`, '_blank');
+        });
+    }
+
+    if (excelDropZone && excelInput) {
+        excelDropZone.addEventListener('click', () => excelInput.click());
+        excelInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) {
+                selectedBatchExcelFile = e.target.files[0];
+                if (excelSelectedInfo) {
+                    excelSelectedInfo.style.display = 'block';
+                    excelSelectedInfo.textContent = `✓ Fichier Excel sélectionné : ${selectedBatchExcelFile.name}`;
+                }
+            }
+        });
+    }
+
+    // Lancement Import Excel
+    const btnStartBatchExcel = document.getElementById('btn-start-batch-excel-upload');
+    if (btnStartBatchExcel) {
+        btnStartBatchExcel.addEventListener('click', async () => {
+            if (!activeProjectId) {
+                showToast("Veuillez sélectionner un projet actif.", "warning");
+                return;
+            }
+            if (!selectedBatchExcelFile) {
+                showToast("Veuillez sélectionner un fichier Excel.", "warning");
+                return;
+            }
+            const qSelect = document.getElementById('batch-target-questionnaire-select');
+            const qId = qSelect ? qSelect.value : null;
+            if (!qId) {
+                showToast("Veuillez sélectionner un questionnaire cible.", "warning");
+                return;
+            }
+
+            showLoader();
+            const formData = new FormData();
+            formData.append('questionnaire_id', qId);
+            formData.append('excel_file', selectedBatchExcelFile);
+
+            try {
+                const response = await fetch(`/api/projects/${activeProjectId}/batch-import-excel`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showToast(data.message, "success");
+                    document.dispatchEvent(new CustomEvent('dataChanged', { detail: 'batch-excel-imported' }));
+                    closeBatchModal();
+                    loadAdvancedStatistics(true);
+                } else {
+                    showToast(data.message || "Erreur lors de l'import Excel.", "error");
+                }
+            } catch (err) {
+                console.error("Erreur import Excel :", err);
+                showToast("Erreur lors de l'import Excel : " + err.message, "error");
+            } finally {
+                hideLoader();
+            }
+        });
+    }
+
 
     // --- 15. INITIALISATION GENERALE ---
     checkUserSession();

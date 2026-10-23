@@ -1,6 +1,12 @@
 import os
 import ssl
+import certifi
 from dotenv import load_dotenv
+
+# Configuration des certificats CA officiels certifi pour les requêtes SSL sécurisées
+ca_bundle = certifi.where()
+os.environ['SSL_CERT_FILE'] = ca_bundle
+os.environ['REQUESTS_CA_BUNDLE'] = ca_bundle
 
 # Contournement des erreurs de certificats SSL locaux (SSL_ERROR_SSL) en développement
 try:

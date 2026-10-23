@@ -10,6 +10,9 @@ from config import Config, allowed_file
 from models import db, User, Project, Questionnaire, Question, InterviewSession, Answer, Attachment, SharedQuestionnaire, QuestionnaireBlock, BlockLibrary
 from ai_service import run_project_triangulation, chat_assistant_respond, POSSIBLE_POSITIVES, POSSIBLE_NEGATIVES, THEMES_DICT, _local_analyze_sentiment
 from pdf_service import generate_global_evaluation_pdf, generate_session_summary_pdf
+from stats_service import get_full_project_statistics
+from pdf_batch_parser import batch_import_pdf_files
+from statistical_export_service import export_advanced_statistics_to_excel, generate_advanced_statistics_pdf
 
 def get_or_create_question_id(q_id_str, questionnaire_id):
     """
@@ -996,6 +999,316 @@ def create_app():
                 pdf_filename, 
                 as_attachment=True, 
                 download_name=f"Compte_Rendu_{secure_filename(session.title)}.pdf"
+            )
+        except Exception as e:
+            return jsonify({'success': False, 'message': f"Erreur de génération PDF : {str(e)}"}), 500
+
+    # --- API STATISTIQUES AVANCÉES & ORIENTATIONS PRO (M&E) ---
+    @app.route('/api/projects/<int:project_id>/statistics', methods=['GET'])
+    @login_required
+    def get_project_statistics(project_id):
+        """Récupère l'ensemble des analyses statistiques poussées (tris à plat, tris croisés, orientations)."""
+        project = Project.query.get_or_404(project_id)
+        if project.user_id != current_user.id:
+            return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
+
+        questionnaire_id = request.args.get('questionnaire_id', type=int)
+        actor_filter = request.args.get('actor')
+
+        stats = get_full_project_statistics(project_id, questionnaire_id=questionnaire_id, actor_filter=actor_filter)
+        if not stats:
+            return jsonify({'success': False, 'message': 'Erreur lors du calcul des statistiques.'}), 500
+
+        return jsonify({'success': True, 'data': stats})
+
+    @app.route('/api/projects/<int:project_id>/batch-upload-pdf', methods=['POST'])
+    @login_required
+    def batch_upload_pdf(project_id):
+        """Importation massive de formulaires PDF remplis (extraction de texte, parsing des questions/réponses)."""
+        project = Project.query.get_or_404(project_id)
+        if project.user_id != current_user.id:
+            return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
+
+        questionnaire_id = request.form.get('questionnaire_id', type=int)
+        if not questionnaire_id:
+            first_q = Questionnaire.query.filter_by(project_id=project_id).first()
+            if first_q:
+                questionnaire_id = first_q.id
+            else:
+                return jsonify({'success': False, 'message': 'Veuillez d\'abord créer un questionnaire pour ce projet.'}), 400
+
+        uploaded_files = request.files.getlist('pdf_files')
+        if not uploaded_files or (len(uploaded_files) == 1 and uploaded_files[0].filename == ''):
+            # Essayer 'files[]'
+            uploaded_files = request.files.getlist('files[]')
+
+        if not uploaded_files or (len(uploaded_files) == 1 and uploaded_files[0].filename == ''):
+            return jsonify({'success': False, 'message': 'Aucun fichier PDF sélectionné.'}), 400
+
+        file_tuples = []
+        for f in uploaded_files:
+            if f and f.filename and f.filename.lower().endswith('.pdf'):
+                file_tuples.append((f.read(), f.filename))
+
+        if not file_tuples:
+            return jsonify({'success': False, 'message': 'Aucun fichier PDF valide fourni.'}), 400
+
+        batch_result = batch_import_pdf_files(file_tuples, questionnaire_id, project_id, current_user.id)
+        
+        # Réinitialisation du cache de triangulation
+        project.cached_triangulation_signature = None
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': f"{batch_result['successful']} formulaires PDF importés avec succès ({batch_result['total_answers_created']} réponses créées).",
+            'batch_result': batch_result
+        })
+
+    @app.route('/api/questionnaires/<int:questionnaire_id>/batch-template-excel', methods=['GET'])
+    @login_required
+    def download_batch_template_excel(questionnaire_id):
+        """Génère et télécharge un modèle Excel de saisie massive pré-rempli avec les questions de l'enquête."""
+        quest = Questionnaire.query.get_or_404(questionnaire_id)
+        if quest.project.user_id != current_user.id:
+            is_shared = SharedQuestionnaire.query.filter_by(questionnaire_id=questionnaire_id, shared_with_user_id=current_user.id).first()
+            if not is_shared:
+                return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
+
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Saisie Massive"
+        ws.views.sheetView[0].showGridLines = True
+
+        headers = [
+            "Date (AAAA-MM-JJ)",
+            "Enquêteur",
+            "Nom ou Groupe Répondant",
+            "Catégorie d'Acteur",
+            "Type Session"
+        ]
+        
+        questions = quest.questions
+        for q in questions:
+            headers.append(f"Q{q.order_num}: {q.text}")
+
+        # Styles
+        fill_header = PatternFill(start_color="4338CA", end_color="4338CA", fill_type="solid")
+        font_header = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+        
+        for col_idx, h in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_idx, value=h)
+            cell.fill = fill_header
+            cell.font = font_header
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+        # Lignes d'exemples pratiques
+        sample_rows = [
+            [
+                datetime.now().strftime("%Y-%m-%d"),
+                "Mireille Dossou",
+                "Comité d'Usagers de Calavi",
+                "Bénéficiaire",
+                "collectif"
+            ] + ["Très satisfait / Bon niveau d'accès" for _ in questions],
+            [
+                datetime.now().strftime("%Y-%m-%d"),
+                "Koffi Mensah",
+                "Adjoint au Maire chargé du développement",
+                "Autorité Locale",
+                "individuel"
+            ] + ["Conforme aux objectifs communaux" for _ in questions],
+        ]
+
+        for r_idx, row in enumerate(sample_rows, 2):
+            for c_idx, val in enumerate(row, 1):
+                cell = ws.cell(row=r_idx, column=c_idx, value=val)
+                cell.font = Font(name="Calibri", size=10)
+
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            from openpyxl.utils import get_column_letter
+            col_letter = get_column_letter(col[0].column)
+            ws.column_dimensions[col_letter].width = min(max(max_len + 3, 16), 45)
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        response = make_response(output.getvalue())
+        response.headers["Content-Disposition"] = f"attachment; filename=Modele_Saisie_Masse_Questionnaire_{quest.id}.xlsx"
+        response.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        return response
+
+    @app.route('/api/projects/<int:project_id>/batch-import-excel', methods=['POST'])
+    @login_required
+    def batch_import_excel(project_id):
+        """Importation massive de dizaines/centaines de formulaires depuis un fichier Excel ou CSV."""
+        project = Project.query.get_or_404(project_id)
+        if project.user_id != current_user.id:
+            return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
+
+        questionnaire_id = request.form.get('questionnaire_id', type=int)
+        if not questionnaire_id:
+            first_q = Questionnaire.query.filter_by(project_id=project_id).first()
+            if first_q:
+                questionnaire_id = first_q.id
+            else:
+                return jsonify({'success': False, 'message': 'Aucun questionnaire cible trouvé.'}), 400
+
+        quest = Questionnaire.query.get_or_404(questionnaire_id)
+        questions = quest.questions
+
+        if 'excel_file' not in request.files:
+            return jsonify({'success': False, 'message': 'Aucun fichier transmis.'}), 400
+
+        file = request.files['excel_file']
+        if not file or file.filename == '':
+            return jsonify({'success': False, 'message': 'Fichier manquant.'}), 400
+
+        filename = file.filename.lower()
+        try:
+            if filename.endswith('.csv'):
+                df = pd.read_csv(file)
+            else:
+                df = pd.read_excel(file)
+        except Exception as e:
+            return jsonify({'success': False, 'message': f"Erreur de lecture du fichier Excel : {e}"}), 400
+
+        if df.empty:
+            return jsonify({'success': False, 'message': 'Le fichier Excel est vide.'}), 400
+
+        # Mappage des colonnes fixes
+        col_names = [str(c).strip() for c in df.columns]
+        
+        # Trouver les colonnes de métadonnées
+        date_col = next((c for c in df.columns if 'date' in str(c).lower()), None)
+        interviewer_col = next((c for c in df.columns if any(k in str(c).lower() for k in ['enquêteur', 'enqueteur', 'evaluateur'])), None)
+        respondent_col = next((c for c in df.columns if any(k in str(c).lower() for k in ['répondant', 'repondant', 'nom', 'groupe', 'interviewé'])), None)
+        actor_col = next((c for c in df.columns if any(k in str(c).lower() for k in ['catégorie', 'categorie', 'acteur'])), None)
+        type_col = next((c for c in df.columns if 'type' in str(c).lower()), None)
+
+        # Les colonnes restantes sont supposées être des questions
+        fixed_cols = [date_col, interviewer_col, respondent_col, actor_col, type_col]
+        q_cols = [c for c in df.columns if c not in fixed_cols and str(c).strip()]
+
+        created_sessions = 0
+        created_answers = 0
+
+        for _, row in df.iterrows():
+            # Date
+            sess_date = datetime.utcnow().date()
+            if date_col and pd.notna(row[date_col]):
+                try:
+                    val = str(row[date_col]).split(' ')[0]
+                    sess_date = datetime.strptime(val, "%Y-%m-%d").date()
+                except Exception:
+                    pass
+
+            interviewer = str(row[interviewer_col]).strip() if (interviewer_col and pd.notna(row[interviewer_col])) else "Évaluateur CSB"
+            respondent = str(row[respondent_col]).strip() if (respondent_col and pd.notna(row[respondent_col])) else "Répondant importé"
+            
+            # Catégorie d'acteur
+            raw_act = str(row[actor_col]).strip() if (actor_col and pd.notna(row[actor_col])) else "Bénéficiaire"
+            act_cat = "Bénéficiaire"
+            if any(k in raw_act.lower() for k in ['autorité', 'autorite', 'maire', 'elu']):
+                act_cat = "Autorité Locale"
+            elif any(k in raw_act.lower() for k in ['équipe', 'equipe', 'csb']):
+                act_cat = "Équipe Projet"
+            elif any(k in raw_act.lower() for k in ['partenaire', 'bailleur']):
+                act_cat = "Partenaire"
+
+            sess_type = "collectif" if (type_col and pd.notna(row[type_col]) and 'collectif' in str(row[type_col]).lower()) else "individuel"
+
+            session = InterviewSession(
+                project_id=project_id,
+                questionnaire_id=questionnaire_id,
+                title=f"Entretien - {respondent[:40]}",
+                interviewer=interviewer,
+                interviewee_name_or_group=respondent,
+                actor_category=act_cat,
+                session_type=sess_type,
+                interview_date=sess_date,
+                user_id=current_user.id
+            )
+            db.session.add(session)
+            db.session.flush()
+            created_sessions += 1
+
+            # Remplissage des réponses
+            for idx_q, q in enumerate(questions):
+                ans_text = None
+                # Recherche par nom de colonne correspondant à Q{order_num} ou au texte
+                for qc in q_cols:
+                    if f"Q{q.order_num}" in str(qc) or q.text[:20].lower() in str(qc).lower():
+                        if pd.notna(row[qc]):
+                            ans_text = str(row[qc]).strip()
+                        break
+                # Si non trouvé par nom, essayer par ordre d'apparition
+                if ans_text is None and idx_q < len(q_cols):
+                    qc = q_cols[idx_q]
+                    if pd.notna(row[qc]):
+                        ans_text = str(row[qc]).strip()
+
+                if ans_text:
+                    ans = Answer(
+                        session_id=session.id,
+                        question_id=q.id,
+                        answer_text=ans_text
+                    )
+                    db.session.add(ans)
+                    created_answers += 1
+
+        project.cached_triangulation_signature = None
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': f"{created_sessions} formulaires importés avec succès ({created_answers} réponses créées).",
+            'imported_sessions': created_sessions,
+            'imported_answers': created_answers
+        })
+
+    @app.route('/api/projects/<int:project_id>/statistics/export/excel', methods=['GET'])
+    @login_required
+    def export_project_statistics_excel(project_id):
+        """Génère et télécharge le classeur Excel multi-feuilles des statistiques avancées."""
+        project = Project.query.get_or_404(project_id)
+        if project.user_id != current_user.id:
+            return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
+
+        questionnaire_id = request.args.get('questionnaire_id', type=int)
+        output = export_advanced_statistics_to_excel(project_id, questionnaire_id)
+        if not output:
+            return jsonify({'success': False, 'message': 'Impossible de générer l\'export Excel.'}), 500
+
+        response = make_response(output.getvalue())
+        response.headers["Content-Disposition"] = f"attachment; filename=Rapport_Statistique_CSB_{secure_filename(project.name)}.xlsx"
+        response.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        return response
+
+    @app.route('/api/projects/<int:project_id>/statistics/export/pdf', methods=['GET'])
+    @login_required
+    def export_project_statistics_pdf(project_id):
+        """Génère et télécharge le rapport statistique professionnel PDF pour bailleurs."""
+        project = Project.query.get_or_404(project_id)
+        if project.user_id != current_user.id:
+            return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
+
+        questionnaire_id = request.args.get('questionnaire_id', type=int)
+        pdf_filename = f"rapport_statistique_pro_projet_{project_id}.pdf"
+        pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], pdf_filename)
+
+        try:
+            generate_advanced_statistics_pdf(project_id, pdf_path, questionnaire_id)
+            return send_from_directory(
+                app.config['UPLOAD_FOLDER'],
+                pdf_filename,
+                as_attachment=True,
+                download_name=f"Rapport_Statistique_CSB_{secure_filename(project.name)}.pdf"
             )
         except Exception as e:
             return jsonify({'success': False, 'message': f"Erreur de génération PDF : {str(e)}"}), 500
