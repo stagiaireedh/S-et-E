@@ -28,9 +28,11 @@ class Config:
     # Configuration de la base de données (Neon PostgreSQL en production, SQLite en local)
     db_url = os.environ.get('DATABASE_URL')
     if db_url:
-        # Convertir postgres:// en postgresql:// (requis pour SQLAlchemy >= 1.4)
+        # Convertir postgres:// ou postgresql:// en postgresql+psycopg2://
         if db_url.startswith("postgres://"):
-            db_url = db_url.replace("postgres://", "postgresql://", 1)
+            db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+        elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+"):
+            db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
         SQLALCHEMY_DATABASE_URI = db_url
     else:
         if os.environ.get('VERCEL_ENV') or os.environ.get('VERCEL'):
