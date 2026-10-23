@@ -3394,32 +3394,39 @@ document.addEventListener('DOMContentLoaded', () => {
         // 1. Mettre à jour les listes déroulantes de questionnaires si nécessaire
         const questSelect = document.getElementById('stats-select-questionnaire');
         const batchQuestSelect = document.getElementById('batch-target-questionnaire-select');
+        const hubQuestSelect = document.getElementById('hub-batch-target-questionnaire-select');
         
-        if (questSelect && questionnaires && questionnaires.length > 0) {
-            const curVal = questSelect.value;
+        if (questionnaires && questionnaires.length > 0) {
             let optionsHtml = '<option value="all">Tous les questionnaires</option>';
             let batchOptionsHtml = '';
             questionnaires.forEach(q => {
                 optionsHtml += `<option value="${q.id}">${q.title}</option>`;
                 batchOptionsHtml += `<option value="${q.id}">${q.title}</option>`;
             });
-            questSelect.innerHTML = optionsHtml;
-            if (curVal) questSelect.value = curVal;
+            if (questSelect) {
+                const curVal = questSelect.value;
+                questSelect.innerHTML = optionsHtml;
+                if (curVal) questSelect.value = curVal;
+            }
             if (batchQuestSelect) batchQuestSelect.innerHTML = batchOptionsHtml;
+            if (hubQuestSelect) hubQuestSelect.innerHTML = batchOptionsHtml;
         }
 
-        // 2. KPIs
+        // 2. KPIs d'en-tête
         const kpiSessions = document.getElementById('stats-kpi-total-sessions');
         const kpiQuestions = document.getElementById('stats-kpi-total-questions');
         const kpiConsensus = document.getElementById('stats-kpi-consensus-index');
-        const kpiOrientations = document.getElementById('stats-kpi-orientations-count');
+        const kpiCompleteness = document.getElementById('stats-kpi-completeness-rate');
 
         if (kpiSessions) kpiSessions.textContent = stats.total_sessions || 0;
         if (kpiQuestions) kpiQuestions.textContent = stats.questions_stats ? stats.questions_stats.length : 0;
         if (kpiConsensus) kpiConsensus.textContent = `${stats.global_consensus_index || 0}%`;
-        if (kpiOrientations) kpiOrientations.textContent = stats.orientations ? stats.orientations.length : 0;
+        if (kpiCompleteness) {
+            const comp = stats.data_audit ? stats.data_audit.completeness_rate : 100;
+            kpiCompleteness.textContent = `${comp}%`;
+        }
 
-        // 3. Graphique 1 : Répartition des Enquêtés par Profil (Camembert/Donut HD)
+        // 3. Graphique 1 : Répartition des Enquêtés par Profil (Donut HD)
         renderActorsDonutChart(stats.actors_distribution || []);
 
         // 4. Peupler le sélecteur de questions pour le graphique de question
@@ -3434,15 +3441,156 @@ document.addEventListener('DOMContentLoaded', () => {
             if (currentSelectedQId && stats.questions_stats.some(qs => qs.question_id == currentSelectedQId)) {
                 qChartSelect.value = currentSelectedQId;
             }
-            // Rendre les détails pour la question sélectionnée
             renderSelectedQuestionStats(qChartSelect.value);
         } else {
             if (qChartSelect) qChartSelect.innerHTML = '<option value="">Aucune question analysable</option>';
             clearSelectedQuestionViews();
         }
 
-        // 5. Orientations Stratégiques (IA & M&E)
+        // 5. Rendu des Piliers Complémentaires
+        renderContextAndAudit(stats);
+        renderExploratoryNoteAndHypotheses(stats);
+        renderSolutionsMatrix(stats);
         renderStrategicOrientations(stats.orientations || []);
+    }
+
+    function renderContextAndAudit(stats) {
+        const ctxContainer = document.getElementById('stats-context-cards-container');
+        if (ctxContainer && stats.context) {
+            const ctx = stats.context;
+            const audit = stats.data_audit || {};
+            ctxContainer.innerHTML = `
+                <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px;">
+                    <span style="font-size: 11px; font-weight: 700; color: #6366f1; text-transform: uppercase;">Source des Données</span>
+                    <h4 style="margin: 6px 0 0 0; font-size: 14px; font-weight: 600;">${ctx.source || 'S&E Changement Social Bénin'}</h4>
+                    <p class="text-muted" style="margin: 4px 0 0 0; font-size: 12px;">Unité d'analyse : ${ctx.observation_unit || 'Entretiens individuels & collectifs'}</p>
+                </div>
+                <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px;">
+                    <span style="font-size: 11px; font-weight: 700; color: #10b981; text-transform: uppercase;">Période d'Observation</span>
+                    <h4 style="margin: 6px 0 0 0; font-size: 14px; font-weight: 600;">Du ${ctx.period_start || 'N/A'} au ${ctx.period_end || 'N/A'}</h4>
+                    <p class="text-muted" style="margin: 4px 0 0 0; font-size: 12px;">Échantillon consolidé : N = ${ctx.total_records || 0} formulaires</p>
+                </div>
+                <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px;">
+                    <span style="font-size: 11px; font-weight: 700; color: #f59e0b; text-transform: uppercase;">Dimensions de la Matrice</span>
+                    <h4 style="margin: 6px 0 0 0; font-size: 14px; font-weight: 600;">${audit.rows_count || 0} lignes × ${audit.columns_count || 0} variables</h4>
+                    <p class="text-muted" style="margin: 4px 0 0 0; font-size: 12px;">Volume total : ${audit.total_cells || 0} cellules évaluées</p>
+                </div>
+                <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px;">
+                    <span style="font-size: 11px; font-weight: 700; color: #06b6d4; text-transform: uppercase;">Intégrité & Santé Données</span>
+                    <h4 style="margin: 6px 0 0 0; font-size: 14px; font-weight: 600;">Score Qualité : ${audit.quality_score || 100} / 100</h4>
+                    <p class="text-muted" style="margin: 4px 0 0 0; font-size: 12px;">Doublons détectés : ${audit.duplicate_sessions_detected || 0} | Statut : ${audit.data_health_status || 'Excellent'}</p>
+                </div>
+            `;
+        }
+
+        // Table d'audit des données manquantes par question
+        const tbodyMissing = document.querySelector('#table-stats-missing-audit tbody');
+        if (tbodyMissing && stats.data_audit && stats.data_audit.missing_by_question) {
+            tbodyMissing.innerHTML = '';
+            for (const [code, info] of Object.entries(stats.data_audit.missing_by_question)) {
+                const tr = document.createElement('tr');
+                const isCritical = info.missing_pct > 15;
+                const statusBadge = isCritical 
+                    ? '<span class="badge-tag" style="background: rgba(239, 68, 68, 0.15); color: #ef4444;">Attention (Attrition)</span>'
+                    : '<span class="badge-tag" style="background: rgba(16, 185, 129, 0.15); color: #10b981;">Conforme</span>';
+                
+                tr.innerHTML = `
+                    <td style="font-weight: 700; color: #6366f1;">${code}</td>
+                    <td style="font-weight: 500;">${info.question_text}</td>
+                    <td style="text-align: right; font-weight: 600;">${info.missing_count}</td>
+                    <td style="text-align: right; font-weight: 700; color: ${isCritical ? '#ef4444' : '#10b981'};">${info.missing_pct}%</td>
+                    <td>${statusBadge}</td>
+                `;
+                tbodyMissing.appendChild(tr);
+            }
+        }
+    }
+
+    function renderExploratoryNoteAndHypotheses(stats) {
+        // Note Exploratoire
+        const noteBox = document.getElementById('stats-exploratory-note-content');
+        if (noteBox && stats.exploratory_note) {
+            const n = stats.exploratory_note;
+            let html = '';
+            
+            // Constats majeurs
+            if (n.main_findings && n.main_findings.length > 0) {
+                html += '<div style="background: rgba(99, 102, 241, 0.05); border-left: 3px solid #6366f1; padding: 12px 16px; border-radius: 6px;">';
+                html += '<strong style="color: #6366f1; font-size: 13px;">📌 Constats Statistiques Majeurs :</strong><ul style="margin: 6px 0 0 18px; font-size: 12.5px; color: var(--text-color);">';
+                n.main_findings.forEach(f => { html += `<li style="margin-bottom: 4px;">${f}</li>`; });
+                html += '</ul></div>';
+            }
+
+            // Anomalies
+            if (n.anomalies && n.anomalies.length > 0) {
+                html += '<div style="background: rgba(245, 158, 11, 0.05); border-left: 3px solid #f59e0b; padding: 12px 16px; border-radius: 6px;">';
+                html += '<strong style="color: #f59e0b; font-size: 13px;">⚠️ Signaux & Anomalies Détectées :</strong><ul style="margin: 6px 0 0 18px; font-size: 12.5px; color: var(--text-color);">';
+                n.anomalies.forEach(a => { html += `<li style="margin-bottom: 4px;">${a}</li>`; });
+                html += '</ul></div>';
+            }
+
+            // Limites méthodologiques
+            if (n.limits && n.limits.length > 0) {
+                html += '<div style="background: rgba(255, 255, 255, 0.02); border-left: 3px solid #64748b; padding: 12px 16px; border-radius: 6px;">';
+                html += '<strong style="color: var(--text-muted); font-size: 13px;">🛡️ Précautions Méthodologiques & Limites :</strong><ul style="margin: 6px 0 0 18px; font-size: 12px; color: var(--text-muted);">';
+                n.limits.forEach(l => { html += `<li style="margin-bottom: 4px;">${l}</li>`; });
+                html += '</ul></div>';
+            }
+
+            noteBox.innerHTML = html;
+        }
+
+        // Hypothèses
+        const hypGrid = document.getElementById('stats-hypotheses-grid');
+        if (hypGrid && stats.hypotheses) {
+            hypGrid.innerHTML = '';
+            stats.hypotheses.forEach(h => {
+                const card = document.createElement('div');
+                card.style.cssText = 'background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; justify-content: space-between;';
+                card.innerHTML = `
+                    <div>
+                        <span class="badge-tag" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; font-size: 10.5px; margin-bottom: 8px; display: inline-block;">${h.theme}</span>
+                        <h4 style="margin: 0 0 8px 0; font-size: 13.5px; font-weight: 700; line-height: 1.4;">« ${h.question_exploratoire} »</h4>
+                        <p class="text-muted" style="margin: 0 0 10px 0; font-size: 12px; line-height: 1.5;"><strong>Hypothèse probable :</strong> ${h.hypothese_explicative}</p>
+                    </div>
+                    <div style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px; font-size: 11.5px; color: #6366f1;">
+                        🔍 <strong>Vérification :</strong> ${h.verification_recommandee}
+                    </div>
+                `;
+                hypGrid.appendChild(card);
+            });
+        }
+    }
+
+    function renderSolutionsMatrix(stats) {
+        const solContainer = document.getElementById('stats-solutions-container');
+        if (solContainer && stats.solutions) {
+            solContainer.innerHTML = '';
+            stats.solutions.forEach(s => {
+                const card = document.createElement('div');
+                const isHigh = (s.priorite === 'Haute');
+                const prioColor = isHigh ? '#ef4444' : '#10b981';
+                const prioBg = isHigh ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)';
+                
+                card.style.cssText = `background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-left: 4px solid ${prioColor}; border-radius: 8px; padding: 16px;`;
+                card.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                        <div>
+                            <span class="badge-tag" style="background: ${prioBg}; color: ${prioColor}; font-weight: 700; font-size: 11px;">[${s.id}] Priorité ${s.priorite}</span>
+                            <strong style="margin-left: 8px; font-size: 14px; font-weight: 700;">${s.axe}</strong>
+                        </div>
+                        <span style="font-size: 12px; color: var(--text-muted);">🗓️ Échéance : <strong>${s.calendrier}</strong></span>
+                    </div>
+                    <p style="margin: 4px 0 6px 0; font-size: 12.5px; color: #f87171;">⚠️ <strong>Problème identifié :</strong> ${s.probleme_identifie}</p>
+                    <p style="margin: 4px 0 8px 0; font-size: 13px; font-weight: 500; color: var(--text-color);">💡 <strong>Solution préconisée :</strong> ${s.solution_preconisee}</p>
+                    <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--text-muted); border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px; margin-top: 8px;">
+                        <span>👥 <strong>Acteurs responsables :</strong> ${s.acteurs_responsables}</span>
+                        <span>🎯 <strong>Indicateur d'impact :</strong> ${s.indicateur_impact}</span>
+                    </div>
+                `;
+                solContainer.appendChild(card);
+            });
+        }
     }
 
     function renderActorsDonutChart(actorsData) {
@@ -3459,7 +3607,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const borderColors = actorsData.map(a => a.border_color);
 
         if (dataValues.length === 0 || dataValues.every(v => v === 0)) {
-            // Placeholder vide
             charts['stats-actors'] = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
@@ -3519,11 +3666,10 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Description sous le tableau
         const descEl = document.getElementById('stats-active-q-desc');
         if (descEl) descEl.textContent = `Question : "${qStats.question_text}" (Total répondants : N = ${qStats.total_answers})`;
 
-        // 1. Graphique 2 : Camembert / Donut HD de Tri à Plat
+        // 1. Graphique Camembert / Donut HD de Tri à Plat
         const ctxPie = document.getElementById('chart-stats-question-pie');
         if (ctxPie) {
             if (charts['stats-question-pie']) charts['stats-question-pie'].destroy();
@@ -3573,14 +3719,14 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // 2. Graphique 3 : Barres Groupées / Empilées de Tris Croisés (Acteurs x Réponses)
+        // 2. Graphique Barres Groupées de Tris Croisés
         const ctxBar = document.getElementById('chart-stats-crosstab-bar');
         if (ctxBar) {
             if (charts['stats-crosstab-bar']) charts['stats-crosstab-bar'].destroy();
 
-            const ct = qStats.cross_tabulation;
+            const ct = qStats.cross_tabulation || {};
             const actors = ct.actors || [];
-            const modalities = qStats.tri_a_plat.map(t => t.label).slice(0, 8); // Top 8 modalités
+            const categories = ct.categories || qStats.tri_a_plat.map(t => t.label).slice(0, 8);
 
             const actorColors = {
                 'Bénéficiaire': { bg: 'rgba(99, 102, 241, 0.85)', border: '#6366f1' },
@@ -3599,9 +3745,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const datasets = actors.map((act, idx) => {
                 const colorConfig = actorColors[act] || defaultPalette[idx % defaultPalette.length];
-                const dataPcts = modalities.map(mod => {
-                    const row = ct.matrix.find(r => r.modality === mod);
-                    return row ? (row.percentages[act] || 0) : 0;
+                const dataPcts = categories.map(cat => {
+                    if (ct.row_percentages && ct.row_percentages[cat]) {
+                        return ct.row_percentages[cat][act] || 0;
+                    }
+                    if (Array.isArray(ct.matrix)) {
+                        const row = ct.matrix.find(r => r.modality === cat);
+                        return row ? (row.percentages[act] || 0) : 0;
+                    }
+                    return 0;
                 });
                 return {
                     label: act,
@@ -3616,7 +3768,7 @@ document.addEventListener('DOMContentLoaded', () => {
             charts['stats-crosstab-bar'] = new Chart(ctxBar, {
                 type: 'bar',
                 data: {
-                    labels: modalities,
+                    labels: categories,
                     datasets: datasets
                 },
                 options: {
@@ -3650,7 +3802,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         },
                         tooltip: {
                             callbacks: {
-                                label: context => ` ${context.dataset.label}: ${context.raw}% des enquêtés`
+                                label: context => ` ${context.dataset.label}: ${context.raw}% au sein du groupe`
                             }
                         }
                     }
@@ -3678,13 +3830,26 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // Résumé numérique si disponible
+        // Résumé numérique univarié complet (Q1, Q3, IQR, etc.)
         const numSummary = document.getElementById('stats-numeric-summary');
         if (numSummary) {
             if (qStats.numeric_stats) {
                 const ns = qStats.numeric_stats;
                 numSummary.style.display = 'block';
-                numSummary.innerHTML = `📊 <strong>Statistiques Descriptives :</strong> Moyenne = <strong>${ns.mean}</strong> | Médiane = <strong>${ns.median}</strong> | Écart-type = <strong>${ns.std_dev}</strong> (Min: ${ns.min}, Max: ${ns.max})`;
+                numSummary.innerHTML = `
+                    <div style="display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; align-items: center;">
+                        <span style="font-weight: 700; color: #6366f1;">📈 Paramètres Numériques :</span>
+                        <span>Moyenne (μ) : <strong>${ns.mean}</strong></span>
+                        <span>Médiane (Me) : <strong>${ns.median}</strong></span>
+                        <span>Quartile Q1 : <strong>${ns.q1}</strong></span>
+                        <span>Quartile Q3 : <strong>${ns.q3}</strong></span>
+                        <span>Écart IQR : <strong>${ns.iqr}</strong></span>
+                        <span>Écart-type (σ) : <strong>${ns.std_dev}</strong></span>
+                        <span>Étendue : <strong>[${ns.min} - ${ns.max}]</strong></span>
+                        <span>Coeff. Variation : <strong>${ns.cv_percent}%</strong></span>
+                        <span>Outliers : <strong>${ns.outliers_count}</strong></span>
+                    </div>
+                `;
             } else {
                 numSummary.style.display = 'none';
             }
@@ -3694,8 +3859,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const ctHead = document.getElementById('table-stats-crosstab-head');
         const ctBody = document.getElementById('table-stats-crosstab-body');
         if (ctHead && ctBody) {
-            const ct = qStats.cross_tabulation;
+            const ct = qStats.cross_tabulation || {};
             const actors = ct.actors || [];
+            const categories = ct.categories || [];
 
             let headHtml = '<tr><th>Modalité</th>';
             actors.forEach(act => {
@@ -3703,18 +3869,18 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             headHtml += '</tr><tr><th></th>';
             actors.forEach(() => {
-                headHtml += '<th style="text-align: right; font-size: 11px; opacity: 0.7;">N</th><th style="text-align: right; font-size: 11px; opacity: 0.7;">%</th>';
+                headHtml += '<th style="text-align: right; font-size: 11px; opacity: 0.7;">Effectif</th><th style="text-align: right; font-size: 11px; opacity: 0.7;">% Ligne</th>';
             });
             headHtml += '</tr>';
             ctHead.innerHTML = headHtml;
 
             ctBody.innerHTML = '';
-            ct.matrix.forEach(row => {
+            categories.forEach(cat => {
                 const tr = document.createElement('tr');
-                let rowHtml = `<td style="font-weight: 500;">${row.modality}</td>`;
+                let rowHtml = `<td style="font-weight: 500;">${cat}</td>`;
                 actors.forEach(act => {
-                    const cnt = row.counts[act] || 0;
-                    const pct = row.percentages[act] || 0;
+                    const cnt = (ct.matrix && ct.matrix[cat]) ? (ct.matrix[cat][act] || 0) : 0;
+                    const pct = (ct.row_percentages && ct.row_percentages[cat]) ? (ct.row_percentages[cat][act] || 0) : 0;
                     rowHtml += `<td style="text-align: right; font-weight: 500;">${cnt}</td>`;
                     rowHtml += `<td style="text-align: right; font-weight: 700; color: #10b981;">${pct}%</td>`;
                 });
@@ -4095,6 +4261,289 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } catch (err) {
                 console.error("Erreur import Excel :", err);
+                showToast("Erreur lors de l'import Excel : " + err.message, "error");
+            } finally {
+                hideLoader();
+            }
+        });
+    }
+
+
+    
+    // =========================================================================
+    // GESTIONNAIRE DES ONGLETS DE L'ONGLET STATISTIQUES (5 PILIERS)
+    // =========================================================================
+    const statNavBtns = [
+        { btn: document.getElementById('nav-btn-stat-desc'), sec: document.getElementById('stat-sec-desc') },
+        { btn: document.getElementById('nav-btn-stat-biv'), sec: document.getElementById('stat-sec-biv') },
+        { btn: document.getElementById('nav-btn-stat-audit'), sec: document.getElementById('stat-sec-audit') },
+        { btn: document.getElementById('nav-btn-stat-hyp'), sec: document.getElementById('stat-sec-hyp') },
+        { btn: document.getElementById('nav-btn-stat-sol'), sec: document.getElementById('stat-sec-sol') },
+    ];
+
+    statNavBtns.forEach(item => {
+        if (item.btn && item.sec) {
+            item.btn.addEventListener('click', () => {
+                statNavBtns.forEach(i => {
+                    if (i.btn) i.btn.className = 'btn-secondary btn-sm';
+                    if (i.sec) i.sec.style.display = 'none';
+                });
+                item.btn.className = 'btn-primary btn-sm';
+                item.sec.style.display = 'block';
+            });
+        }
+    });
+
+    // =========================================================================
+    // CENTRE D'INGESTION & IMPORTATION MASSIVE DE DONNÉES DU DASHBOARD
+    // =========================================================================
+    const hubTabBtnPdf = document.getElementById('hub-tab-btn-pdf');
+    const hubTabBtnExcel = document.getElementById('hub-tab-btn-excel');
+    const hubTabBtnDocs = document.getElementById('hub-tab-btn-docs');
+    const hubPanePdf = document.getElementById('hub-pane-pdf');
+    const hubPaneExcel = document.getElementById('hub-pane-excel');
+    const hubPaneDocs = document.getElementById('hub-pane-docs');
+
+    if (hubTabBtnPdf && hubTabBtnExcel && hubTabBtnDocs) {
+        hubTabBtnPdf.addEventListener('click', () => {
+            hubTabBtnPdf.className = 'btn-primary btn-sm';
+            hubTabBtnExcel.className = 'btn-secondary btn-sm';
+            hubTabBtnDocs.className = 'btn-secondary btn-sm';
+            if (hubPanePdf) hubPanePdf.style.display = 'block';
+            if (hubPaneExcel) hubPaneExcel.style.display = 'none';
+            if (hubPaneDocs) hubPaneDocs.style.display = 'none';
+        });
+        hubTabBtnExcel.addEventListener('click', () => {
+            hubTabBtnExcel.className = 'btn-primary btn-sm';
+            hubTabBtnPdf.className = 'btn-secondary btn-sm';
+            hubTabBtnDocs.className = 'btn-secondary btn-sm';
+            if (hubPanePdf) hubPanePdf.style.display = 'none';
+            if (hubPaneExcel) hubPaneExcel.style.display = 'block';
+            if (hubPaneDocs) hubPaneDocs.style.display = 'none';
+        });
+        hubTabBtnDocs.addEventListener('click', () => {
+            hubTabBtnDocs.className = 'btn-primary btn-sm';
+            hubTabBtnPdf.className = 'btn-secondary btn-sm';
+            hubTabBtnExcel.className = 'btn-secondary btn-sm';
+            if (hubPanePdf) hubPanePdf.style.display = 'none';
+            if (hubPaneExcel) hubPaneExcel.style.display = 'none';
+            if (hubPaneDocs) hubPaneDocs.style.display = 'block';
+        });
+    }
+
+    // Drag & Drop PDF Hub
+    const hubPdfDropZone = document.getElementById('hub-pdf-drop-zone');
+    const hubPdfInput = document.getElementById('hub-pdf-input');
+    const hubPdfSelectedInfo = document.getElementById('hub-pdf-selected-info');
+    let hubSelectedPDFs = [];
+
+    if (hubPdfDropZone && hubPdfInput) {
+        hubPdfDropZone.addEventListener('click', () => hubPdfInput.click());
+        hubPdfInput.addEventListener('change', (e) => {
+            handleHubPDFs(Array.from(e.target.files));
+        });
+        hubPdfDropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            hubPdfDropZone.style.borderColor = '#6366f1';
+            hubPdfDropZone.style.background = 'rgba(99, 102, 241, 0.1)';
+        });
+        hubPdfDropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            hubPdfDropZone.style.borderColor = 'rgba(99, 102, 241, 0.4)';
+            hubPdfDropZone.style.background = 'transparent';
+        });
+        hubPdfDropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            hubPdfDropZone.style.borderColor = 'rgba(99, 102, 241, 0.4)';
+            hubPdfDropZone.style.background = 'transparent';
+            if (e.dataTransfer && e.dataTransfer.files) {
+                handleHubPDFs(Array.from(e.dataTransfer.files));
+            }
+        });
+    }
+
+    function handleHubPDFs(files) {
+        const validPDFs = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+        if (validPDFs.length === 0) {
+            showToast("Veuillez sélectionner des fichiers au format PDF.", "warning");
+            return;
+        }
+        hubSelectedPDFs = validPDFs;
+        if (hubPdfSelectedInfo) {
+            hubPdfSelectedInfo.style.display = 'block';
+            hubPdfSelectedInfo.textContent = `✓ ${validPDFs.length} formulaire(s) PDF prêt(s) pour l'ingestion massive.`;
+        }
+    }
+
+    // Lancer Upload PDF depuis le Hub
+    const hubBtnStartPdf = document.getElementById('hub-btn-start-pdf-upload');
+    if (hubBtnStartPdf) {
+        hubBtnStartPdf.addEventListener('click', async () => {
+            if (!activeProjectId) {
+                showToast("Veuillez sélectionner un projet actif.", "warning");
+                return;
+            }
+            if (!hubSelectedPDFs || hubSelectedPDFs.length === 0) {
+                showToast("Veuillez sélectionner un ou plusieurs formulaires PDF.", "warning");
+                return;
+            }
+            const qSelect = document.getElementById('hub-batch-target-questionnaire-select');
+            const qId = qSelect ? qSelect.value : null;
+            if (!qId) {
+                showToast("Veuillez sélectionner le questionnaire cible.", "warning");
+                return;
+            }
+
+            const progressContainer = document.getElementById('hub-pdf-progress-container');
+            const progressBar = document.getElementById('hub-progress-bar');
+            const progressPct = document.getElementById('hub-progress-pct');
+            const progressLabel = document.getElementById('hub-progress-label');
+
+            if (progressContainer) progressContainer.style.display = 'block';
+            if (progressBar) progressBar.style.width = '30%';
+            if (progressPct) progressPct.textContent = '30%';
+            if (progressLabel) progressLabel.textContent = `Téléversement et extraction de ${hubSelectedPDFs.length} formulaire(s)...`;
+
+            const formData = new FormData();
+            formData.append('questionnaire_id', qId);
+            hubSelectedPDFs.forEach(f => formData.append('pdf_files', f));
+
+            try {
+                showLoader();
+                const response = await fetch(`/api/projects/${activeProjectId}/batch-import-pdfs`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (progressBar) progressBar.style.width = '100%';
+                if (progressPct) progressPct.textContent = '100%';
+
+                if (data.success) {
+                    showToast(data.message, "success");
+                    hubSelectedPDFs = [];
+                    if (hubPdfSelectedInfo) {
+                        hubPdfSelectedInfo.style.display = 'block';
+                        hubPdfSelectedInfo.textContent = `✅ Succès : ${data.imported_sessions} formulaires traités avec succès.`;
+                    }
+                    await loadDashboardData();
+                    loadAdvancedStatistics(true);
+                } else {
+                    showToast(data.message || "Erreur lors de l'ingestion.", "error");
+                }
+            } catch (err) {
+                console.error("Erreur ingestion PDF Hub :", err);
+                showToast("Erreur lors du traitement des PDF : " + err.message, "error");
+            } finally {
+                hideLoader();
+            }
+        });
+    }
+
+    // Drag & Drop Excel Hub
+    const hubExcelDropZone = document.getElementById('hub-excel-drop-zone');
+    const hubExcelInput = document.getElementById('hub-excel-input');
+    const hubExcelSelectedInfo = document.getElementById('hub-excel-selected-info');
+    let hubSelectedExcelFile = null;
+
+    if (hubExcelDropZone && hubExcelInput) {
+        hubExcelDropZone.addEventListener('click', () => hubExcelInput.click());
+        hubExcelInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                hubSelectedExcelFile = file;
+                if (hubExcelSelectedInfo) {
+                    hubExcelSelectedInfo.style.display = 'block';
+                    hubExcelSelectedInfo.textContent = `✓ Fichier sélectionné : ${file.name} (${Math.round(file.size / 1024)} Ko)`;
+                }
+            }
+        });
+        hubExcelDropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            hubExcelDropZone.style.borderColor = '#10b981';
+            hubExcelDropZone.style.background = 'rgba(16, 185, 129, 0.1)';
+        });
+        hubExcelDropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            hubExcelDropZone.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+            hubExcelDropZone.style.background = 'transparent';
+        });
+        hubExcelDropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            hubExcelDropZone.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+            hubExcelDropZone.style.background = 'transparent';
+            if (e.dataTransfer && e.dataTransfer.files[0]) {
+                const file = e.dataTransfer.files[0];
+                hubSelectedExcelFile = file;
+                if (hubExcelSelectedInfo) {
+                    hubExcelSelectedInfo.style.display = 'block';
+                    hubExcelSelectedInfo.textContent = `✓ Fichier sélectionné : ${file.name} (${Math.round(file.size / 1024)} Ko)`;
+                }
+            }
+        });
+    }
+
+    // Télécharger Gabarit Excel depuis le Hub
+    const hubBtnDownloadTemplate = document.getElementById('hub-btn-download-excel-template');
+    if (hubBtnDownloadTemplate) {
+        hubBtnDownloadTemplate.addEventListener('click', () => {
+            if (!activeProjectId) {
+                showToast("Veuillez sélectionner un projet.", "warning");
+                return;
+            }
+            const qSelect = document.getElementById('hub-batch-target-questionnaire-select');
+            const qId = qSelect ? qSelect.value : null;
+            if (!qId) {
+                showToast("Veuillez sélectionner un questionnaire cible.", "warning");
+                return;
+            }
+            window.location.href = `/api/projects/${activeProjectId}/batch-excel-template?questionnaire_id=${qId}`;
+        });
+    }
+
+    // Lancer Import Excel depuis le Hub
+    const hubBtnStartExcel = document.getElementById('hub-btn-start-excel-upload');
+    if (hubBtnStartExcel) {
+        hubBtnStartExcel.addEventListener('click', async () => {
+            if (!activeProjectId) {
+                showToast("Veuillez sélectionner un projet actif.", "warning");
+                return;
+            }
+            if (!hubSelectedExcelFile) {
+                showToast("Veuillez sélectionner un fichier Excel.", "warning");
+                return;
+            }
+            const qSelect = document.getElementById('hub-batch-target-questionnaire-select');
+            const qId = qSelect ? qSelect.value : null;
+            if (!qId) {
+                showToast("Veuillez sélectionner le questionnaire cible.", "warning");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('questionnaire_id', qId);
+            formData.append('excel_file', hubSelectedExcelFile);
+
+            try {
+                showLoader();
+                const response = await fetch(`/api/projects/${activeProjectId}/batch-import-excel`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showToast(data.message, "success");
+                    hubSelectedExcelFile = null;
+                    if (hubExcelSelectedInfo) {
+                        hubExcelSelectedInfo.style.display = 'block';
+                        hubExcelSelectedInfo.textContent = `✅ Import réussi : ${data.imported_sessions} formulaires intégrés.`;
+                    }
+                    await loadDashboardData();
+                    loadAdvancedStatistics(true);
+                } else {
+                    showToast(data.message || "Erreur lors de l'import Excel.", "error");
+                }
+            } catch (err) {
+                console.error("Erreur import Excel Hub :", err);
                 showToast("Erreur lors de l'import Excel : " + err.message, "error");
             } finally {
                 hideLoader();

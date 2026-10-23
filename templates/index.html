@@ -315,8 +315,112 @@
                     </div>
                 </div>
 
-                <!-- Session list / Recent Uploads -->
-                <div class="dashboard-lists">
+                <!-- ================= CENTRE D'INGESTION & IMPORTATION MASSIVE DE DONNÉES (PLEINE LARGEUR) ================= -->
+                <div class="card batch-hub-card" id="dashboard-batch-hub" style="margin-bottom: 24px; border: 1.5px solid rgba(99, 102, 241, 0.25); background: linear-gradient(180deg, rgba(99, 102, 241, 0.03) 0%, rgba(255, 255, 255, 0) 100%);">
+                    <div class="card-header-flex" style="flex-wrap: wrap; gap: 12px; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 14px;">
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 20px;">📥</span>
+                                <h3 style="margin: 0; font-size: 16px; font-weight: 700;">Centre d'Importation & d'Ingestion Massive de Données</h3>
+                                <span class="badge-tag" style="background: rgba(99, 102, 241, 0.15); color: #6366f1; font-weight: 600; padding: 2px 8px; font-size: 11px;">Haute Capacité</span>
+                            </div>
+                            <p class="text-muted" style="margin: 4px 0 0 0; font-size: 12.5px;">Téléversez et analysez en masse vos formulaires PDF remplis (10, 50, 100+ fiches), vos matrices Excel ou vos pièces jointes.</p>
+                        </div>
+                        
+                        <div style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
+                            <label for="hub-batch-target-questionnaire-select" style="font-size: 12px; font-weight: 600; color: var(--text-muted);">Questionnaire cible :</label>
+                            <select id="hub-batch-target-questionnaire-select" class="custom-select" style="min-width: 220px; font-size: 12.5px;">
+                                <!-- Rempli dynamiquement -->
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Onglets de sélection du mode d'ingestion -->
+                    <div style="display: flex; gap: 10px; margin-top: 16px; margin-bottom: 16px; flex-wrap: wrap;">
+                        <button id="hub-tab-btn-pdf" class="btn-primary btn-sm" style="flex: 1; min-width: 180px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 16px;">
+                            <span>📄</span> <strong>Formulaires PDF en Masse (Batch)</strong>
+                        </button>
+                        <button id="hub-tab-btn-excel" class="btn-secondary btn-sm" style="flex: 1; min-width: 180px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 16px;">
+                            <span>📊</span> <strong>Matrice Excel / CSV Collectée</strong>
+                        </button>
+                        <button id="hub-tab-btn-docs" class="btn-secondary btn-sm" style="flex: 1; min-width: 180px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 16px;">
+                            <span>📎</span> <strong>Pièces Jointes & Documents</strong>
+                        </button>
+                    </div>
+
+                    <!-- Volet 1 : Ingestion Massive PDF -->
+                    <div id="hub-pane-pdf" style="display: block;">
+                        <div class="file-drop-zone" id="hub-pdf-drop-zone" style="padding: 34px 20px; border-width: 2px; border-style: dashed; border-color: rgba(99, 102, 241, 0.4); border-radius: 14px; text-align: center; cursor: pointer; transition: all 0.2s ease;">
+                            <svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="#6366f1" stroke-width="1.6" style="margin-bottom: 10px;">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6M9 15l3-3 3 3"/>
+                            </svg>
+                            <h4 style="margin: 0 0 6px 0; font-size: 16px; font-weight: 700;">Glissez-déposez ici vos formulaires PDF remplis</h4>
+                            <p class="text-muted" style="margin: 0 auto; max-width: 580px; font-size: 12.5px;">Sélectionnez ou déposez 10, 50, 100+ fiches de collecte d'entretien PDF simultanément. Le système extrait les réponses et produit les statistiques consolidées.</p>
+                            <button type="button" class="btn-secondary btn-sm" style="margin-top: 14px; pointer-events: none;">Parcourir vos fichiers PDF</button>
+                            <input type="file" id="hub-pdf-input" accept=".pdf" multiple style="display: none;">
+                        </div>
+                        
+                        <div id="hub-pdf-selected-info" style="margin-top: 12px; font-size: 13px; font-weight: 600; color: #6366f1; display: none; background: rgba(99, 102, 241, 0.08); padding: 10px 14px; border-radius: 8px;"></div>
+                        
+                        <div id="hub-pdf-progress-container" style="display: none; margin-top: 14px;">
+                            <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; margin-bottom: 6px;">
+                                <span id="hub-progress-label">Extraction et parsing des formulaires en cours...</span>
+                                <span id="hub-progress-pct" style="color: #6366f1;">0%</span>
+                            </div>
+                            <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden;">
+                                <div id="hub-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #6366f1, #10b981); transition: width 0.3s ease;"></div>
+                            </div>
+                        </div>
+
+                        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px;">
+                            <button id="hub-btn-start-pdf-upload" class="btn-primary" style="padding: 10px 22px; font-size: 13.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #4f46e5, #7c3aed);">
+                                <span>⚡</span> Lancer l'Ingestion & l'Extraction Statistique
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Volet 2 : Ingestion Matrice Excel -->
+                    <div id="hub-pane-excel" style="display: none;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+                            <p class="text-muted" style="margin: 0; font-size: 12.5px;">Importez directement une matrice de réponses collectées au format Excel (.xlsx, .csv).</p>
+                            <button id="hub-btn-download-excel-template" class="btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 6px;">
+                                <span>📥</span> Télécharger le Gabarit Excel Type (.xlsx)
+                            </button>
+                        </div>
+                        <div class="file-drop-zone" id="hub-excel-drop-zone" style="padding: 30px 20px; border-width: 2px; border-style: dashed; border-color: rgba(16, 185, 129, 0.4); border-radius: 14px; text-align: center; cursor: pointer;">
+                            <svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="#10b981" stroke-width="1.6" style="margin-bottom: 8px;">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/>
+                            </svg>
+                            <h4 style="margin: 0 0 6px 0; font-size: 15px;">Sélectionnez votre fichier Excel (.xlsx, .csv)</h4>
+                            <p class="text-muted" style="margin: 0; font-size: 12px;">Glissez-déposez le fichier ici ou cliquez pour parcourir</p>
+                            <input type="file" id="hub-excel-input" accept=".xlsx,.xls,.csv" style="display: none;">
+                        </div>
+                        <div id="hub-excel-selected-info" style="margin-top: 10px; font-size: 13px; font-weight: 600; color: #10b981; display: none;"></div>
+                        <div style="display: flex; justify-content: flex-end; margin-top: 14px;">
+                            <button id="hub-btn-start-excel-upload" class="btn-primary" style="padding: 10px 22px; font-size: 13.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #059669, #10b981);">
+                                <span>⚡</span> Importer la Matrice Excel
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Volet 3 : Documents & Pièces Jointes -->
+                    <div id="hub-pane-docs" style="display: none;">
+                        <div class="file-drop-zone" id="file-drop-area" style="padding: 30px 20px; border-width: 2px; border-style: dashed; border-color: rgba(99, 102, 241, 0.4); border-radius: 14px; text-align: center; cursor: pointer;">
+                            <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.6" style="margin-bottom: 8px;">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                            </svg>
+                            <h4 style="margin: 0 0 6px 0; font-size: 15px;">Glissez-déposez ici les documents et pièces jointes du projet</h4>
+                            <p class="text-muted" style="margin: 0; font-size: 12px;">Comptes-rendus, conventions, fiches d'activités, photographies de terrain</p>
+                            <input type="file" id="file-upload-input" style="display:none;" multiple>
+                        </div>
+                        <div class="attachments-list" id="attachments-container-list" style="margin-top: 14px; display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto;">
+                            <!-- Rempli dynamiquement -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Session list / Recent Questionnaires (Grille équilibrée et aérée) -->
+                <div class="dashboard-lists" style="display: grid; grid-template-columns: 1.6fr 1fr; gap: 24px;">
                     <!-- Recent Sessions -->
                     <div class="card recent-list-card">
                         <div class="card-header-flex">
@@ -345,36 +449,17 @@
                         </div>
                     </div>
 
-                    <div style="display: flex; flex-direction: column; gap: 24px; min-width: 0;">
-                        <!-- Vos Questionnaires -->
-                        <div class="card recent-list-card">
-                            <div class="card-header-flex">
-                                <h3>Vos Questionnaires</h3>
-                                <button id="btn-dashboard-new-quest" class="btn-link" style="font-size:12.5px;">+ Nouveau</button>
-                            </div>
-                            <div id="dashboard-questionnaires-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; margin-top: 10px; padding-right: 4px;">
-                                <!-- Rempli dynamiquement -->
-                            </div>
+                    <!-- Vos Questionnaires -->
+                    <div class="card recent-list-card">
+                        <div class="card-header-flex">
+                            <h3>Vos Questionnaires</h3>
+                            <button id="btn-dashboard-new-quest" class="btn-link" style="font-size:12.5px;">+ Nouveau</button>
                         </div>
-
-                        <!-- Project Documents / Attachments -->
-                        <div class="card recent-list-card">
-                            <div class="card-header-flex">
-                                <h3>Documents et Pièces Jointes</h3>
-                            </div>
-                        <div class="file-drop-zone" id="file-drop-area">
-                            <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
-                            </svg>
-                            <p>Glissez-déposez vos fichiers ici ou <span class="file-browse-btn">parcourez</span></p>
-                            <input type="file" id="file-upload-input" style="display:none;" multiple>
-                        </div>
-                        <div class="attachments-list" id="attachments-container-list">
+                        <div id="dashboard-questionnaires-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 380px; overflow-y: auto; margin-top: 10px; padding-right: 4px;">
                             <!-- Rempli dynamiquement -->
                         </div>
                     </div>
                 </div>
-            </div>
             </section>
 
             <!-- ================= TAB: COLLECTE & SAISIE ================= -->
