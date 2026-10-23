@@ -617,11 +617,11 @@
                 </div>
             </section>
 
-                        <!-- ================= TAB: STATISTIQUES AVANCÉES PRO ================= -->
+            <!-- ================= TAB: STATISTIQUES AVANCÉES (8 PILIERS MÉTHODOLOGIQUES) ================= -->
             <section id="tab-statistiques" class="tab-pane">
-                <!-- Toolbar Supérieure Filtres & Exports -->
-                <div class="stats-toolbar card" style="margin-bottom: 24px; padding: 16px 20px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between;">
-                    <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+                <!-- Header Stats Toolbar -->
+                <div class="stats-header-toolbar card" style="margin-bottom: 24px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 24px;">
+                    <div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: center;">
                         <div class="form-group-inline" style="margin: 0;">
                             <label for="stats-select-questionnaire" style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-right: 6px;">Questionnaire :</label>
                             <select id="stats-select-questionnaire" class="custom-select" style="min-width: 220px;">
@@ -645,22 +645,18 @@
                     </div>
 
                     <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
-                        <button id="btn-open-batch-upload" class="btn-primary btn-sm" style="display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(135deg, #4f46e5, #7c3aed);">
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-                            📥 Ingestion Massive (PDF / Excel)
+                        <button id="btn-export-stats-excel" class="btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
+                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#10b981" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            📊 Excel Pro (7 Onglets)
                         </button>
-                        <button id="btn-export-stats-excel" class="btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 6px;">
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                            Excel Pro Multi-Feuilles
-                        </button>
-                        <button id="btn-export-stats-pdf" class="btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 6px; border-color: rgba(99, 102, 241, 0.4);">
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                            Rapport PDF Bailleurs
+                        <button id="btn-export-stats-pdf" class="btn-primary btn-sm" style="display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(135deg, #4338ca, #6366f1); font-weight: 600;">
+                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            📄 Rapport PDF Bailleurs (8 Piliers)
                         </button>
                     </div>
                 </div>
 
-                <!-- KPI Grid Statistiques Pro -->
+                <!-- KPI Grid Statistiques Pro & Audit -->
                 <div class="kpi-grid" style="margin-bottom: 24px;">
                     <div class="kpi-card">
                         <div class="kpi-icon bg-indigo-soft">
@@ -677,7 +673,16 @@
                         </div>
                         <div class="kpi-data">
                             <span class="kpi-value" id="stats-kpi-total-questions">0</span>
-                            <span class="kpi-label">Questions Analysées</span>
+                            <span class="kpi-label">Variables & Questions (P)</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon bg-teal-soft">
+                            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#0f766e" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="stats-kpi-completeness-rate">0%</span>
+                            <span class="kpi-label">Taux de Complétude Données</span>
                         </div>
                     </div>
                     <div class="kpi-card">
@@ -689,72 +694,70 @@
                             <span class="kpi-label">Indice de Consensus Global</span>
                         </div>
                     </div>
-                    <div class="kpi-card">
-                        <div class="kpi-icon bg-pink-soft">
-                            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#ec4899" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                        </div>
-                        <div class="kpi-data">
-                            <span class="kpi-value" id="stats-kpi-orientations-count">0</span>
-                            <span class="kpi-label">Orientations Décisionnelles</span>
-                        </div>
+                </div>
+
+                <!-- ================= BARRE DE NAVIGATION THÉMATIQUE (5 SECTIONS ANALYTIQUES) ================= -->
+                <div class="card" style="margin-bottom: 24px; padding: 12px 16px; background: rgba(255, 255, 255, 0.02);">
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button id="nav-btn-stat-desc" class="btn-primary btn-sm" style="flex: 1; min-width: 170px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                            <span>📊</span> 1. Distributions & Descriptives
+                        </button>
+                        <button id="nav-btn-stat-biv" class="btn-secondary btn-sm" style="flex: 1; min-width: 170px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                            <span>🔄</span> 2. Tris Croisés & Divergences
+                        </button>
+                        <button id="nav-btn-stat-audit" class="btn-secondary btn-sm" style="flex: 1; min-width: 170px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                            <span>🏢</span> 3. Contexte & Audit Qualité
+                        </button>
+                        <button id="nav-btn-stat-hyp" class="btn-secondary btn-sm" style="flex: 1; min-width: 170px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                            <span>🔍</span> 4. Note Exploratoire & Hypothèses
+                        </button>
+                        <button id="nav-btn-stat-sol" class="btn-secondary btn-sm" style="flex: 1; min-width: 170px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                            <span>💡</span> 5. Solutions & Plan d'Action M&E
+                        </button>
                     </div>
                 </div>
 
-                <!-- Grille des Graphiques HD (Camemberts & Barres de Tris Croisés) -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 24px; margin-bottom: 24px;">
-                    <!-- Graphique 1 : Camembert / Donut Répartition Acteurs -->
-                    <div class="card chart-card" style="min-height: 380px;">
+                <!-- SECTION 1 : STATISTIQUES DESCRIPTIVES & VISUALISATIONS (Active par défaut) -->
+                <div id="stat-sec-desc" style="display: block;">
+                    <!-- Grille des Graphiques HD (Camemberts & Barres de Tris Croisés) -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 24px; margin-bottom: 24px;">
+                        <!-- Graphique 1 : Camembert / Donut Répartition Acteurs -->
+                        <div class="card chart-card" style="min-height: 380px;">
+                            <div class="card-header-flex">
+                                <div>
+                                    <h3 style="margin: 0; font-size: 15px; font-weight: 700;">🥧 Répartition des Enquêtés par Profil d'Acteur</h3>
+                                    <p class="text-muted" style="margin: 3px 0 0 0; font-size: 12px;">Échantillon global ventilé par catégorie institutionnelle</p>
+                                </div>
+                                <button class="btn-link" onclick="downloadChartAsPNG('chart-stats-actors', 'repartition_acteurs_csb.png')" style="font-size: 11px;">📷 Télécharger</button>
+                            </div>
+                            <div class="canvas-container" style="position: relative; height: 280px; margin-top: 15px;">
+                                <canvas id="chart-stats-actors"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Graphique 2 : Camembert / Donut par Question Sélectionnée -->
+                        <div class="card chart-card" style="min-height: 380px;">
+                            <div class="card-header-flex">
+                                <div style="flex: 1; min-width: 0; margin-right: 10px;">
+                                    <h3 style="margin: 0; font-size: 15px; font-weight: 700;">🎯 Distribution des Réponses (Tri à Plat)</h3>
+                                    <select id="stats-select-question-chart" class="custom-select" style="margin-top: 6px; font-size: 12px; width: 100%; max-width: 380px;">
+                                        <!-- Rempli dynamiquement -->
+                                    </select>
+                                </div>
+                                <button class="btn-link" onclick="downloadChartAsPNG('chart-stats-question-pie', 'tri_a_plat_question_csb.png')" style="font-size: 11px; white-space: nowrap;">📷 Télécharger</button>
+                            </div>
+                            <div class="canvas-container" style="position: relative; height: 280px; margin-top: 15px;">
+                                <canvas id="chart-stats-question-pie"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tableau de Tri à Plat Détaillé & Paramètres Numériques -->
+                    <div class="card" style="margin-bottom: 24px;">
                         <div class="card-header-flex">
                             <div>
-                                <h3 style="margin: 0; font-size: 15px; font-weight: 700;">🥧 Répartition des Enquêtés par Profil</h3>
-                                <p class="text-muted" style="margin: 3px 0 0 0; font-size: 12px;">Échantillon global par catégorie d'acteur</p>
-                            </div>
-                            <button class="btn-link" onclick="downloadChartAsPNG('chart-stats-actors', 'repartition_acteurs_csb.png')" style="font-size: 11px;">📷 Télécharger</button>
-                        </div>
-                        <div class="canvas-container" style="position: relative; height: 280px; margin-top: 15px;">
-                            <canvas id="chart-stats-actors"></canvas>
-                        </div>
-                    </div>
-
-                    <!-- Graphique 2 : Camembert / Donut par Question Sélectionnée -->
-                    <div class="card chart-card" style="min-height: 380px;">
-                        <div class="card-header-flex">
-                            <div style="flex: 1; min-width: 0; margin-right: 10px;">
-                                <h3 style="margin: 0; font-size: 15px; font-weight: 700;">🎯 Distribution des Réponses (Tri à Plat)</h3>
-                                <select id="stats-select-question-chart" class="custom-select" style="margin-top: 6px; font-size: 12px; width: 100%; max-width: 380px;">
-                                    <!-- Rempli dynamiquement -->
-                                </select>
-                            </div>
-                            <button class="btn-link" onclick="downloadChartAsPNG('chart-stats-question-pie', 'tri_a_plat_question_csb.png')" style="font-size: 11px; white-space: nowrap;">📷 Télécharger</button>
-                        </div>
-                        <div class="canvas-container" style="position: relative; height: 280px; margin-top: 15px;">
-                            <canvas id="chart-stats-question-pie"></canvas>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Graphique 3 : Barres Groupées / Empilées de Tris Croisés -->
-                <div class="card chart-card" style="margin-bottom: 24px;">
-                    <div class="card-header-flex">
-                        <div>
-                            <h3 style="margin: 0; font-size: 16px; font-weight: 700;">📊 Tris Croisés Multi-Catégories (Comparaison Directe)</h3>
-                            <p class="text-muted" style="margin: 3px 0 0 0; font-size: 12.5px;">Confrontation des taux d'adhésion (%) selon la catégorie d'acteurs pour la question sélectionnée</p>
-                        </div>
-                        <button class="btn-link" onclick="downloadChartAsPNG('chart-stats-crosstab-bar', 'tri_croise_acteurs_csb.png')" style="font-size: 11px;">📷 Télécharger</button>
-                    </div>
-                    <div class="canvas-container" style="position: relative; height: 320px; margin-top: 15px;">
-                        <canvas id="chart-stats-crosstab-bar"></canvas>
-                    </div>
-                </div>
-
-                <!-- Section Tableaux Détaillés : Tri à Plat et Matrice de Tris Croisés -->
-                <div style="display: grid; grid-template-columns: 1fr; gap: 24px; margin-bottom: 24px;">
-                    <!-- Tableau de Tri à Plat Détaillé -->
-                    <div class="card">
-                        <div class="card-header-flex">
-                            <div>
-                                <h3 style="margin: 0; font-size: 15px; font-weight: 700;">📋 Tableau de Fréquences & Statistiques de la Question</h3>
-                                <p id="stats-active-q-desc" class="text-muted" style="margin: 3px 0 0 0; font-size: 12px;">Détail exhaustif des effectifs et fréquences</p>
+                                <h3 style="margin: 0; font-size: 15px; font-weight: 700;">📋 Tableau de Fréquences & Métriques de la Variable</h3>
+                                <p id="stats-active-q-desc" class="text-muted" style="margin: 3px 0 0 0; font-size: 12px;">Détail exhaustif des effectifs, pourcentages, mode et entropie</p>
                             </div>
                         </div>
                         <div class="table-container" style="margin-top: 15px;">
@@ -762,9 +765,9 @@
                                 <thead>
                                     <tr>
                                         <th>Modalité / Option de Réponse</th>
-                                        <th style="text-align: right;">Effectif (N)</th>
+                                        <th style="text-align: right;">Effectif (n_i)</th>
                                         <th style="text-align: right;">Fréquence (%)</th>
-                                        <th style="min-width: 180px;">Répartition Visuelle</th>
+                                        <th style="min-width: 180px;">Répartition Graphique</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -772,15 +775,46 @@
                                 </tbody>
                             </table>
                         </div>
-                        <div id="stats-numeric-summary" style="margin-top: 12px; display: none;" class="badge-tag"></div>
+                        
+                        <!-- Boîte des Paramètres Numériques / Échelle -->
+                        <div id="stats-numeric-summary" style="margin-top: 16px; padding: 14px 18px; border-radius: 10px; background: rgba(99, 102, 241, 0.05); border: 1px solid rgba(99, 102, 241, 0.2); display: none;">
+                            <!-- Injecté dynamiquement -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SECTION 2 : TRIS CROISÉS & DIVERGENCES BIVARIÉES -->
+                <div id="stat-sec-biv" style="display: none;">
+                    <div class="card" style="margin-bottom: 20px; background: rgba(239, 68, 68, 0.04); border-left: 4px solid #ef4444; padding: 14px 18px;">
+                        <div style="display: flex; gap: 10px; align-items: flex-start;">
+                            <span style="font-size: 18px;">⚠️</span>
+                            <div>
+                                <strong style="color: #ef4444; font-size: 13px;">Rappel de Rigueur Méthodologique :</strong>
+                                <p style="margin: 3px 0 0 0; font-size: 12.5px; color: var(--text-muted);">
+                                    Une relation ou corrélation statistique constatée entre catégories d'acteurs et réponses ne prouve pas automatiquement une causalité directe. Les variations peuvent dépendre de facteurs d'exposition locale ou d'asymétrie d'information.
+                                </p>
+                            </div>
+                        </div>
                     </div>
 
-                    <!-- Matrice de Tri Croisé Dynamique -->
-                    <div class="card">
+                    <div class="card chart-card" style="margin-bottom: 24px;">
                         <div class="card-header-flex">
                             <div>
-                                <h3 style="margin: 0; font-size: 15px; font-weight: 700;">🔄 Matrice de Tri Croisé (Réponses x Catégories d'Acteurs)</h3>
-                                <p class="text-muted" style="margin: 3px 0 0 0; font-size: 12px;">Mise en lumière des consensus et des fractures de perception</p>
+                                <h3 style="margin: 0; font-size: 16px; font-weight: 700;">📊 Tris Croisés Multi-Catégories (Comparaison Directe)</h3>
+                                <p class="text-muted" style="margin: 3px 0 0 0; font-size: 12.5px;">Confrontation des taux d'adhésion (%) selon la catégorie d'acteurs</p>
+                            </div>
+                            <button class="btn-link" onclick="downloadChartAsPNG('chart-stats-crosstab-bar', 'tri_croise_acteurs_csb.png')" style="font-size: 11px;">📷 Télécharger</button>
+                        </div>
+                        <div class="canvas-container" style="position: relative; height: 320px; margin-top: 15px;">
+                            <canvas id="chart-stats-crosstab-bar"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-bottom: 24px;">
+                        <div class="card-header-flex">
+                            <div>
+                                <h3 style="margin: 0; font-size: 15px; font-weight: 700;">🔄 Matrice de Contingence (Modalités x Catégories d'Acteurs)</h3>
+                                <p class="text-muted" style="margin: 3px 0 0 0; font-size: 12px;">Effectifs réels et pourcentages en ligne (% au sein de chaque groupe)</p>
                             </div>
                         </div>
                         <div class="table-container" style="margin-top: 15px; overflow-x: auto;">
@@ -793,30 +827,106 @@
                                 </tbody>
                             </table>
                         </div>
-                        <div id="stats-divergences-container" style="margin-top: 15px; display: flex; flex-direction: column; gap: 8px;">
+                        <div id="stats-divergences-container" style="margin-top: 16px; display: flex; flex-direction: column; gap: 10px;">
                             <!-- Alertes de divergences injectées en JS -->
                         </div>
                     </div>
                 </div>
 
-                <!-- Section Orientations Stratégiques & Aide à la Décision -->
-                <div class="card" style="margin-bottom: 24px;">
-                    <div class="card-header-flex">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <span class="badge-ai" style="padding: 4px 10px; font-size: 11px;">M&E STRATÉGIQUE</span>
-                            <h3 style="margin: 0; font-size: 16px; font-weight: 700;">Orientations Stratégiques & Plan d'Action (IA Décisionnelle)</h3>
+                <!-- SECTION 3 : CONTEXTE DES DONNÉES & AUDIT QUALITÉ -->
+                <div id="stat-sec-audit" style="display: none;">
+                    <div class="card" style="margin-bottom: 24px;">
+                        <div class="card-header-flex">
+                            <div>
+                                <h3 style="margin: 0; font-size: 16px; font-weight: 700;">🏢 Contexte Général & Cadre Méthodologique de l'Enquête</h3>
+                                <p class="text-muted" style="margin: 3px 0 0 0; font-size: 12px;">Origine des données, période, population cible et unités d'analyse</p>
+                            </div>
+                        </div>
+                        <div style="margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px;" id="stats-context-cards-container">
+                            <!-- Injecté dynamiquement -->
                         </div>
                     </div>
-                    <p class="text-muted" style="margin: 8px 0 16px 0; font-size: 13px;">
-                        Orientations prioritaires formulées automatiquement sur la base des signaux quantitatifs et de la triangulation qualitative des acteurs.
-                    </p>
-                    <div id="stats-orientations-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;">
-                        <!-- Rempli en JS -->
+
+                    <div class="card" style="margin-bottom: 24px;">
+                        <div class="card-header-flex">
+                            <div>
+                                <h3 style="margin: 0; font-size: 16px; font-weight: 700;">🔍 Audit Qualité, Complétude & Données Manquantes</h3>
+                                <p class="text-muted" style="margin: 3px 0 0 0; font-size: 12px;">Contrôle d'intégrité de la matrice : cellules remplies, doublons et taux d'attrition</p>
+                            </div>
+                        </div>
+                        <div class="table-container" style="margin-top: 15px;">
+                            <table class="custom-table" id="table-stats-missing-audit">
+                                <thead>
+                                    <tr>
+                                        <th>Code</th>
+                                        <th>Intitulé de la Variable</th>
+                                        <th style="text-align: right;">Valeurs Manquantes</th>
+                                        <th style="text-align: right;">Taux d'Incomplétude (%)</th>
+                                        <th>Statut Qualité</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Rempli dynamiquement -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SECTION 4 : NOTE EXPLORATOIRE & HYPOTHÈSES STATISTIQUES -->
+                <div id="stat-sec-hyp" style="display: none;">
+                    <div class="card" style="margin-bottom: 24px;">
+                        <div class="card-header-flex">
+                            <div>
+                                <h3 style="margin: 0; font-size: 16px; font-weight: 700;">📝 Note Exploratoire des Données (Synthèse Analytique)</h3>
+                                <p class="text-muted" style="margin: 3px 0 0 0; font-size: 12px;">Constats majeurs, signaux faibles, anomalies et limites méthodologiques</p>
+                            </div>
+                        </div>
+                        <div id="stats-exploratory-note-content" style="margin-top: 16px; display: flex; flex-direction: column; gap: 14px;">
+                            <!-- Injecté dynamiquement -->
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-bottom: 24px;">
+                        <div class="card-header-flex">
+                            <div>
+                                <h3 style="margin: 0; font-size: 16px; font-weight: 700;">💡 Formulation d'Hypothèses Statistiques Exploitables</h3>
+                                <p class="text-muted" style="margin: 3px 0 0 0; font-size: 12px;">Questions clés issues des régularités observées pour orienter les investigations de terrain</p>
+                            </div>
+                        </div>
+                        <div id="stats-hypotheses-grid" style="margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;">
+                            <!-- Injecté dynamiquement -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SECTION 5 : SOLUTIONS & PLAN D'ACTION M&E -->
+                <div id="stat-sec-sol" style="display: none;">
+                    <div class="card" style="margin-bottom: 24px;">
+                        <div class="card-header-flex">
+                            <div>
+                                <span class="badge-ai" style="padding: 4px 10px; font-size: 11px; margin-bottom: 6px; display: inline-block;">INGÉNIERIE M&E</span>
+                                <h3 style="margin: 0; font-size: 16px; font-weight: 700;">Matrice Opérationnelle des Solutions & Plan d'Action</h3>
+                                <p class="text-muted" style="margin: 3px 0 0 0; font-size: 12px;">Recommandations concrètes sur les problèmes identifiés, avec responsabilités, calendrier et indicateurs</p>
+                            </div>
+                        </div>
+                        <div id="stats-solutions-container" style="margin-top: 16px; display: flex; flex-direction: column; gap: 14px;">
+                            <!-- Injecté dynamiquement -->
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-bottom: 24px;">
+                        <div class="card-header-flex">
+                            <h3 style="margin: 0; font-size: 16px; font-weight: 700;">Orientations Stratégiques Décisionnelles (IA Senior)</h3>
+                        </div>
+                        <p class="text-muted" style="margin: 6px 0 16px 0; font-size: 12.5px;">Recommandations de gouvernance pour les bailleurs et décideurs de Changement Social Bénin.</p>
+                        <div id="stats-orientations-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;">
+                            <!-- Rempli en JS -->
+                        </div>
                     </div>
                 </div>
             </section>
 
-            <!-- ================= TAB: ASSISTANT IA ================= -->
             <section id="tab-assistant" class="tab-pane">
                 <div class="card assistant-chat-card">
                     <div class="chat-header">
