@@ -12,6 +12,7 @@ import os
 import tempfile
 import textwrap
 from datetime import datetime
+from PIL import Image
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
@@ -38,47 +39,93 @@ ACTOR_HEX = {
 
 
 # =============================================================================
+# FONCTIONS UTILITAIRES DE RENDU & FORMATAGE
+# =============================================================================
+
+def clean_bar_label(txt, max_chars=34):
+    """Enroule un libellé sur 2 lignes maximum avec points de suspension si trop long pour éviter tout chevauchement."""
+    if not txt:
+        return ""
+    lines = textwrap.wrap(str(txt), width=max_chars)
+    if len(lines) > 2:
+        return lines[0] + '\n' + lines[1][:max_chars - 3] + '...'
+    return '\n'.join(lines)
+
+
+def insert_chart_in_pdf(pdf, image_path, target_width=142, max_bottom_margin=270):
+    """
+    Insère une image graphique dans le PDF avec calcul exact de sa hauteur réelle,
+    saut de page automatique sécurisé si l'espace est insuffisant,
+    et positionnement strict du curseur Y sous l'image pour bannir tout chevauchement de texte.
+    """
+    if not image_path or not os.path.exists(image_path):
+        return 0
+
+    try:
+        with Image.open(image_path) as img:
+            px_w, px_h = img.size
+            aspect_ratio = px_h / px_w
+    except Exception:
+        aspect_ratio = 0.50
+
+    img_h = target_width * aspect_ratio
+
+    # Si l'image + 12mm de texte ne tiennent pas sur la page, saut de page immédiat
+    if pdf.get_y() + img_h + 12 > max_bottom_margin:
+        pdf.add_page()
+
+    x_center = (210 - target_width) / 2
+    current_y = pdf.get_y()
+
+    # Dessiner l'image
+    pdf.image(image_path, x=x_center, y=current_y, w=target_width, h=img_h)
+
+    # Repositionner le curseur Y strictement après l'image avec un coussin d'espacement de 4mm
+    pdf.set_y(current_y + img_h + 4)
+    return img_h
+
+
+# =============================================================================
 # FONCTIONS DE GÉNÉRATION DE GRAPHIQUES HD (MATPLOTLIB) POUR LE PDF
 # =============================================================================
 
 def generate_donut_chart_img(labels, values, title, temp_dir, filename="donut_chart.png"):
-    """Génère un camembert / donut chart moderne haute résolution en couleurs avec pourcentages et légende complète."""
+    """Génère un donut chart moderne haute résolution sans chevauchement avec légende claire."""
     if not labels or not values or sum(values) == 0:
         return None
-    
+
     total_val = sum(values)
     n = len(labels)
-    fig, ax = plt.subplots(figsize=(7.5, 4.0), dpi=200)
+    fig, ax = plt.subplots(figsize=(8.0, 3.8), dpi=200)
     colors = PALETTE_HEX[:n]
-    
-    # Donut chart
+
+    # Donut chart avec pourcentages sur les tranches uniquement si >= 6%
     wedges, texts, autotexts = ax.pie(
         values,
         labels=None,
-        autopct='%1.1f%%',
+        autopct=lambda pct: f'{pct:.1f}%' if pct >= 6 else '',
         startangle=140,
         colors=colors,
         pctdistance=0.75,
         wedgeprops=dict(width=0.45, edgecolor='white', linewidth=2.5)
     )
-    
-    # Styliser les pourcentages sur le donut
+
     for autotext in autotexts:
         autotext.set_color('white')
-        autotext.set_fontsize(9.5)
+        autotext.set_fontsize(9)
         autotext.set_weight('bold')
-    
-    # Légende soignée sur le côté avec libellé complet wrappé
+
+    # Légende soignée sur le côté avec libellé enroulé
     legend_labels = [
-        f"{textwrap.fill(lbl, 26)} : {val} répondants ({round(val/total_val*100, 1)}%)"
+        f"{textwrap.fill(lbl, 26)} : {val} ({round(val/total_val*100, 1)}%)"
         for lbl, val in zip(labels, values)
     ]
     ax.legend(
         wedges, legend_labels,
-        title="Groupes d'Acteurs Interrogés",
-        title_fontsize=9.5,
+        title="Groupes d'Acteurs",
+        title_fontsize=9,
         loc="center left",
-        bbox_to_anchor=(1.02, 0.5),
+        bbox_to_anchor=(1.05, 0.5),
         fontsize=8.5,
         frameon=True,
         facecolor='#f8fafc',
@@ -86,11 +133,13 @@ def generate_donut_chart_img(labels, values, title, temp_dir, filename="donut_ch
         borderpad=0.8,
         labelspacing=0.6
     )
-    
+
     wrapped_title = textwrap.fill(title, 55)
-    ax.set_title(wrapped_title, fontsize=11.5, fontweight='bold', color='#1e1b4b', pad=15)
-    plt.tight_layout()
-    
+    ax.set_title(wrapped_title, fontsize=11, fontweight='bold', color='#1e1b4b', pad=14)
+
+    # Réserver explicitement l'espace pour éviter tout écrasement par tight_layout
+    fig.subplots_adjust(left=0.04, right=0.50, top=0.86, bottom=0.08)
+
     filepath = os.path.join(temp_dir, filename)
     plt.savefig(filepath, format='png', dpi=200, bbox_inches='tight')
     plt.close(fig)
@@ -98,7 +147,7 @@ def generate_donut_chart_img(labels, values, title, temp_dir, filename="donut_ch
 
 
 def generate_question_pie_chart_img(tri_a_plat, title, temp_dir, filename="question_pie.png"):
-    """Génère un camembert HD pour le tri à plat d'une question — labels complets, légende lisible."""
+    """Génère un camembert / donut HD lisible sans chevauchement pour question à options limitées."""
     if not tri_a_plat:
         return None
 
@@ -107,23 +156,18 @@ def generate_question_pie_chart_img(tri_a_plat, title, temp_dir, filename="quest
     if sum(values) == 0:
         return None
 
-    # Labels complets avec wrapping (pas de troncature)
-    labels = [textwrap.fill(t['label'], 28) for t in tri_a_plat]
-
-    # Taille dynamique : plus de modalités = figure plus haute
-    fig_h = max(4.5, 3.2 + n * 0.35)
-    fig_w = 8.5
-    fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=200)
+    fig, ax = plt.subplots(figsize=(8.2, 3.8), dpi=200)
     colors = PALETTE_HEX[:n]
 
+    # Donut chart : affiche le % uniquement si >= 8% pour éviter les superpositions sur petites tranches
     wedges, texts, autotexts = ax.pie(
         values,
         labels=None,
-        autopct=lambda pct: f'{pct:.1f}%' if pct > 4 else '',
+        autopct=lambda pct: f'{pct:.1f}%' if pct >= 8 else '',
         startangle=90,
         colors=colors,
-        pctdistance=0.78,
-        wedgeprops=dict(edgecolor='white', linewidth=2.5)
+        pctdistance=0.76,
+        wedgeprops=dict(width=0.48, edgecolor='white', linewidth=2.5)
     )
 
     for autotext in autotexts:
@@ -131,31 +175,32 @@ def generate_question_pie_chart_img(tri_a_plat, title, temp_dir, filename="quest
         autotext.set_fontsize(9)
         autotext.set_weight('bold')
 
-    # Légende complète avec label intégral, effectif et %
+    # Légende complète avec libellé enroulé sur 2 lignes max
     legend_labels = [
-        f"{textwrap.fill(t['label'], 32)}  →  {t['count']} rép. ({t['percentage']}%)"
+        f"{clean_bar_label(t['label'], 28)} : {t['count']} ({t['percentage']}%)"
         for t in tri_a_plat
     ]
     leg = ax.legend(
         wedges, legend_labels,
-        title="Répartition des réponses",
-        title_fontsize=9.5,
+        title="Options de réponse",
+        title_fontsize=9,
         loc="center left",
-        bbox_to_anchor=(1.01, 0.5),
+        bbox_to_anchor=(1.05, 0.5),
         fontsize=8.5,
         frameon=True,
         facecolor='#f8fafc',
         edgecolor='#cbd5e1',
         borderpad=0.8,
-        labelspacing=0.7,
+        labelspacing=0.6,
     )
     leg.get_title().set_fontweight('bold')
 
-    # Titre complet (avec wrapping si long)
-    wrapped_title = textwrap.fill(title, 72)
-    ax.set_title(wrapped_title, fontsize=10.5, fontweight='bold', color='#1e1b4b', pad=14)
+    wrapped_title = textwrap.fill(title, 60)
+    ax.set_title(wrapped_title, fontsize=10.5, fontweight='bold', color='#1e1b4b', pad=12)
 
-    plt.tight_layout()
+    # Marges fixes évitant tout contact entre le donut et la légende
+    fig.subplots_adjust(left=0.04, right=0.48, top=0.85, bottom=0.08)
+
     filepath = os.path.join(temp_dir, filename)
     plt.savefig(filepath, format='png', dpi=200, bbox_inches='tight')
     plt.close(fig)
@@ -163,46 +208,48 @@ def generate_question_pie_chart_img(tri_a_plat, title, temp_dir, filename="quest
 
 
 def generate_horizontal_bar_chart_img(tri_a_plat, title, temp_dir, filename="horizontal_bar.png"):
-    """Génère un diagramme en barres horizontales avec labels complets et pourcentages explicites."""
+    """Génère un diagramme en barres horizontales aéré sans aucun chevauchement de texte sur l'axe Y."""
     if not tri_a_plat:
         return None
 
-    # On garde les 10 premières modalités max, triées par fréquence décroissante
-    items = sorted(tri_a_plat, key=lambda x: x['percentage'], reverse=True)[:10]
-    items_reversed = list(reversed(items))  # barres : la plus fréquente en haut
+    # On sélectionne les Top 6 modalités principales pour un visuel propre et lisible
+    is_truncated = len(tri_a_plat) > 6
+    items = sorted(tri_a_plat, key=lambda x: x['percentage'], reverse=True)[:6]
+    items_reversed = list(reversed(items))
 
-    # Labels complets wrappés (pas de troncature)
-    labels = [textwrap.fill(t['label'], 30) for t in items_reversed]
+    # Libellés sécurisés à 2 lignes maximum pour bannir tout chevauchement vertical
+    labels = [clean_bar_label(t['label'], max_chars=34) for t in items_reversed]
     percentages = [t['percentage'] for t in items_reversed]
     counts = [t['count'] for t in items_reversed]
 
-    # Hauteur dynamique selon le nombre de barres
+    # Espacement vertical généreux garanti par barre (0.65 pouce minimum par barre)
     n = len(labels)
-    fig_h = max(3.8, 1.2 + n * 0.52)
-    # Marge gauche adaptée à la longueur max des labels
-    max_label_chars = max(len(lbl.split('\n')[0]) for lbl in labels) if labels else 20
-    left_margin = min(0.42, 0.18 + max_label_chars * 0.006)
-
+    fig_h = max(3.5, 1.2 + n * 0.65)
     fig, ax = plt.subplots(figsize=(8.5, fig_h), dpi=200)
+
     bars = ax.barh(range(n), percentages, color=[PALETTE_HEX[i % len(PALETTE_HEX)] for i in range(n)],
-                   height=0.6, edgecolor='none')
+                   height=0.55, edgecolor='none')
 
     ax.set_yticks(range(n))
-    ax.set_yticklabels(labels, fontsize=8.5, color='#1e293b')
+    ax.set_yticklabels(labels, fontsize=8.0, color='#1e293b')
+    ax.tick_params(axis='y', pad=8)
 
-    ax.set_xlim(0, max(100, max(percentages) + 18) if percentages else 100)
+    max_p = max(percentages) if percentages else 100
+    ax.set_xlim(0, max_p * 1.25 + 8)
     ax.set_xlabel('Part des répondants (%)', fontsize=8.5, color='#64748b', labelpad=8)
 
-    # Titre complet
-    wrapped_title = textwrap.fill(title, 70)
-    ax.set_title(wrapped_title, fontsize=10.5, fontweight='bold', color='#1e1b4b', pad=12)
+    chart_title = title
+    if is_truncated:
+        chart_title += " (Top 6 modalités principales)"
+    wrapped_title = textwrap.fill(chart_title, 65)
+    ax.set_title(wrapped_title, fontsize=10, fontweight='bold', color='#1e1b4b', pad=12)
 
-    # Étiquettes de données : effectif + %
+    # Étiquettes de données nettes
     for bar, pct, cnt in zip(bars, percentages, counts):
         width = bar.get_width()
         ax.text(width + 1.2, bar.get_y() + bar.get_height() / 2,
-                f"{pct}%  (N = {cnt})",
-                va='center', ha='left', fontsize=8.5, fontweight='bold', color='#1e1b4b')
+                f"{pct}% (N = {cnt})",
+                va='center', ha='left', fontsize=8.0, fontweight='bold', color='#1e1b4b')
 
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -211,7 +258,8 @@ def generate_horizontal_bar_chart_img(tri_a_plat, title, temp_dir, filename="hor
     ax.xaxis.grid(True, linestyle='--', alpha=0.4, color='#cbd5e1')
     ax.set_axisbelow(True)
 
-    plt.subplots_adjust(left=left_margin, right=0.85, top=0.88, bottom=0.12)
+    fig.subplots_adjust(left=0.44, right=0.84, top=0.86, bottom=0.10)
+
     filepath = os.path.join(temp_dir, filename)
     plt.savefig(filepath, format='png', dpi=200, bbox_inches='tight')
     plt.close(fig)
@@ -219,26 +267,25 @@ def generate_horizontal_bar_chart_img(tri_a_plat, title, temp_dir, filename="hor
 
 
 def generate_crosstab_grouped_bar_img(question_stats, temp_dir, filename="crosstab_grouped_bar.png"):
-    """Génère un diagramme en barres groupées comparatives par catégorie d'acteur — labels complets."""
+    """Génère un diagramme en barres groupées comparatives sans superposition de chiffres ni de labels."""
     ct = question_stats.get('cross_tabulation')
     if not ct or not ct.get('actors'):
         return None
 
-    actors = ct['actors']
-    categories = ct.get('categories', [])[:6]  # Top 6 modalités
+    actors = ct['actors'][:4]
+    categories = ct.get('categories', [])[:4]  # Top 4 modalités pour une lisibilité parfaite
     if not categories:
         return None
 
     import numpy as np
 
-    # Labels complets wrappés
-    cat_labels = [textwrap.fill(c, 22) for c in categories]
+    # Libellés d'axe X concis
+    cat_labels = [clean_bar_label(c, max_chars=20) for c in categories]
 
     x = np.arange(len(categories))
     width = min(0.18, 0.72 / max(1, len(actors)))
 
-    fig_h = max(4.0, 3.0 + len(categories) * 0.18)
-    fig, ax = plt.subplots(figsize=(9.0, fig_h), dpi=200)
+    fig, ax = plt.subplots(figsize=(9.2, 4.2), dpi=200)
 
     for i, act in enumerate(actors):
         pcts = [ct['row_percentages'].get(cat, {}).get(act, 0) for cat in categories]
@@ -246,24 +293,24 @@ def generate_crosstab_grouped_bar_img(question_stats, temp_dir, filename="crosst
         rects = ax.bar(x + (i - len(actors) / 2 + 0.5) * width, pcts, width,
                        label=act, color=color, edgecolor='white', linewidth=1)
 
+        # N'annoter au-dessus de la barre que si la barre est significative (>= 12%) pour éviter l'encombrement
         for r in rects:
             h = r.get_height()
-            if h > 5:
+            if h >= 12:
                 ax.annotate(f"{int(round(h))}%",
                             xy=(r.get_x() + r.get_width() / 2, h),
                             xytext=(0, 2), textcoords="offset points",
-                            ha='center', va='bottom', fontsize=7.5, fontweight='bold', color='#334155')
+                            ha='center', va='bottom', fontsize=7.0, fontweight='bold', color='#334155')
 
-    ax.set_ylabel('Part au sein du groupe (%)', fontsize=9, color='#64748b')
-    q_text = textwrap.fill(question_stats['question_text'], 65)
+    ax.set_ylabel('Part au sein du groupe (%)', fontsize=8.5, color='#64748b')
+    q_text = textwrap.fill(question_stats['question_text'], 60)
     ax.set_title(f"Tris Croisés par Catégorie d'Acteur\n« {q_text} »",
                  fontsize=10, fontweight='bold', color='#1e1b4b', pad=12)
     ax.set_xticks(x)
-    ax.set_xticklabels(cat_labels, fontsize=8.5, fontweight='600', color='#1e1b4b',
-                       ha='center', wrap=True)
+    ax.set_xticklabels(cat_labels, fontsize=8.0, fontweight='600', color='#1e1b4b', ha='center')
     ax.set_ylim(0, 118)
 
-    ax.legend(loc='upper right', fontsize=8.5, frameon=True, facecolor='#f8fafc', edgecolor='#cbd5e1')
+    ax.legend(loc='upper right', fontsize=8.0, frameon=True, facecolor='#f8fafc', edgecolor='#cbd5e1')
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_color('#cbd5e1')
@@ -271,7 +318,8 @@ def generate_crosstab_grouped_bar_img(question_stats, temp_dir, filename="crosst
     ax.yaxis.grid(True, linestyle='--', alpha=0.4, color='#cbd5e1')
     ax.set_axisbelow(True)
 
-    plt.tight_layout()
+    fig.subplots_adjust(left=0.08, right=0.96, top=0.84, bottom=0.18)
+
     filepath = os.path.join(temp_dir, filename)
     plt.savefig(filepath, format='png', dpi=200, bbox_inches='tight')
     plt.close(fig)
@@ -282,31 +330,32 @@ def generate_temporal_trend_chart_img(trend_data, temp_dir, filename="temporal_t
     """Génère un histogramme d'évolution temporelle de la collecte."""
     if not trend_data or not trend_data.get('monthly_trend'):
         return None
-    
+
     items = trend_data['monthly_trend']
     periods = [it['period'] for it in items]
     counts = [it['count'] for it in items]
-    
-    fig, ax = plt.subplots(figsize=(6.5, 2.8), dpi=200)
+
+    fig, ax = plt.subplots(figsize=(7.5, 2.8), dpi=200)
     bars = ax.bar(periods, counts, color='#6366f1', width=0.5, edgecolor='none')
-    
+
     for bar, cnt in zip(bars, counts):
         h = bar.get_height()
         ax.annotate(f"{cnt}",
                     xy=(bar.get_x() + bar.get_width() / 2, h),
                     xytext=(0, 3), textcoords="offset points",
-                    ha='center', va='bottom', fontsize=8.5, fontweight='bold', color='#1e1b4b')
-        
+                    ha='center', va='bottom', fontsize=8.0, fontweight='bold', color='#1e1b4b')
+
     ax.set_ylabel("Nombre d'entretiens", fontsize=8.5, color='#64748b')
-    ax.set_title("Rythme de Collecte & Distribution Temporelle", fontsize=10.5, fontweight='bold', color='#1e1b4b', pad=10)
+    ax.set_title("Rythme de Collecte & Distribution Temporelle", fontsize=10, fontweight='bold', color='#1e1b4b', pad=10)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_color('#cbd5e1')
     ax.spines['bottom'].set_color('#cbd5e1')
     ax.yaxis.grid(True, linestyle='--', alpha=0.4, color='#cbd5e1')
     ax.set_axisbelow(True)
-    plt.tight_layout()
-    
+
+    fig.subplots_adjust(left=0.10, right=0.95, top=0.86, bottom=0.15)
+
     filepath = os.path.join(temp_dir, filename)
     plt.savefig(filepath, format='png', dpi=200, bbox_inches='tight')
     plt.close(fig)
@@ -691,13 +740,8 @@ def generate_advanced_statistics_pdf(project_id, filepath, questionnaire_id=None
 
         # Insertion du Donut Chart HD des Acteurs
         if actors_chart_path and os.path.exists(actors_chart_path):
-            if pdf.get_y() > 195:
-                pdf.add_page()
             pdf.ln(2)
-            img_w = 145
-            x_center = (210 - img_w) / 2
-            pdf.image(actors_chart_path, x=x_center, y=pdf.get_y(), w=img_w)
-            pdf.ln(78)
+            insert_chart_in_pdf(pdf, actors_chart_path, target_width=145)
 
             pdf.set_font('helvetica', 'I', 8)
             pdf.set_text_color(100, 116, 139)
@@ -810,12 +854,8 @@ def generate_advanced_statistics_pdf(project_id, filepath, questionnaire_id=None
             # Insertion du graphique HD (Camembert ou Diagramme en Barres)
             q_chart = question_charts.get(qs['question_id'])
             if q_chart and os.path.exists(q_chart):
-                if pdf.get_y() > 195:
-                    pdf.add_page()
-                img_w = 142
-                x_center = (210 - img_w) / 2
-                pdf.image(q_chart, x=x_center, y=pdf.get_y(), w=img_w)
-                pdf.ln(72)
+                pdf.ln(1)
+                insert_chart_in_pdf(pdf, q_chart, target_width=142)
 
             # Synthèse analytique automatique sous le graphique
             pdf.set_font('helvetica', 'I', 8)
@@ -879,10 +919,8 @@ def generate_advanced_statistics_pdf(project_id, filepath, questionnaire_id=None
 
         # Insertion du Diagramme en Barres Groupées des Tris Croisés
         if crosstab_chart_path and os.path.exists(crosstab_chart_path):
-            img_w = 155
-            x_center = (210 - img_w) / 2
-            pdf.image(crosstab_chart_path, x=x_center, y=pdf.get_y(), w=img_w)
-            pdf.ln(80)
+            pdf.ln(2)
+            insert_chart_in_pdf(pdf, crosstab_chart_path, target_width=155)
             pdf.ln(2)
 
         for idx_q, qs in enumerate(q_stats, 1):
@@ -893,9 +931,17 @@ def generate_advanced_statistics_pdf(project_id, filepath, questionnaire_id=None
             if pdf.get_y() > 210:
                 pdf.add_page()
 
+            all_cats = ct.get('categories', [])
+            is_cats_truncated = len(all_cats) > 6
+            categories_to_show = all_cats[:6] if is_cats_truncated else all_cats
+
+            q_title_crois = f"Tris Croisés Q{idx_q} : {qs['question_text']}"
+            if is_cats_truncated:
+                q_title_crois += " (Top 6 modalités)"
+
             pdf.set_font('helvetica', 'B', 9.5)
             pdf.set_text_color(30, 27, 75)
-            pdf.multi_cell(0, 4.5, f"Tris Croisés Q{idx_q} : {qs['question_text']}")
+            pdf.multi_cell(0, 4.5, q_title_crois)
             
             # Signaler les divergences significatives
             if qs.get('divergences'):
@@ -918,7 +964,7 @@ def generate_advanced_statistics_pdf(project_id, filepath, questionnaire_id=None
                 hdr.cell("Modalité de Réponse")
                 for act in actors:
                     hdr.cell(str(act))
-                for cat in ct.get('categories', []):
+                for cat in categories_to_show:
                     r = table.row()
                     r.cell(str(cat))
                     for act in actors:
@@ -953,13 +999,8 @@ def generate_advanced_statistics_pdf(project_id, filepath, questionnaire_id=None
 
         # Insertion du graphique temporel si disponible
         if temporal_chart_path and os.path.exists(temporal_chart_path):
-            if pdf.get_y() > 205:
-                pdf.add_page()
             pdf.ln(2)
-            img_w = 145
-            x_center = (210 - img_w) / 2
-            pdf.image(temporal_chart_path, x=x_center, y=pdf.get_y(), w=img_w)
-            pdf.ln(60)
+            insert_chart_in_pdf(pdf, temporal_chart_path, target_width=145)
 
         # Limites des données
         pdf.set_font('helvetica', 'B', 9)
