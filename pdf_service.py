@@ -35,17 +35,21 @@ class EvaluatorPDF(FPDF):
         self.set_margins(15, 20, 15)
         self.set_auto_page_break(auto=True, margin=20)
 
-    def cell(self, w, h=0, txt="", *args, **kwargs):
-        txt = clean_unicode(txt)
-        return super().cell(w, h, txt, *args, **kwargs)
+    def cell(self, w=None, h=None, text="", *args, **kwargs):
+        if 'txt' in kwargs:
+            text = kwargs.pop('txt')
+        text = clean_unicode(text)
+        return super().cell(w, h, text, *args, **kwargs)
 
-    def multi_cell(self, w, h=0, txt="", *args, **kwargs):
-        txt = clean_unicode(txt)
+    def multi_cell(self, w=None, h=None, text="", *args, **kwargs):
+        if 'txt' in kwargs:
+            text = kwargs.pop('txt')
+        text = clean_unicode(text)
         if 'new_x' not in kwargs:
             kwargs['new_x'] = 'LMARGIN'
         if 'new_y' not in kwargs:
             kwargs['new_y'] = 'NEXT'
-        return super().multi_cell(w, h, txt, *args, **kwargs)
+        return super().multi_cell(w, h, text, *args, **kwargs)
 
         
     def header(self):

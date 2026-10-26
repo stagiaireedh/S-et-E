@@ -10,6 +10,7 @@ Génère :
 import io
 import os
 import tempfile
+import textwrap
 from datetime import datetime
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -19,6 +20,7 @@ from openpyxl.utils import get_column_letter
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 
 from fpdf import FPDF
 from stats_service import get_full_project_statistics, STAT_COLORS
@@ -40,12 +42,14 @@ ACTOR_HEX = {
 # =============================================================================
 
 def generate_donut_chart_img(labels, values, title, temp_dir, filename="donut_chart.png"):
-    """Génère un camembert / donut chart moderne haute résolution en couleurs avec pourcentages et légende."""
+    """Génère un camembert / donut chart moderne haute résolution en couleurs avec pourcentages et légende complète."""
     if not labels or not values or sum(values) == 0:
         return None
     
-    fig, ax = plt.subplots(figsize=(6.5, 3.8), dpi=200)
-    colors = PALETTE_HEX[:len(labels)]
+    total_val = sum(values)
+    n = len(labels)
+    fig, ax = plt.subplots(figsize=(7.5, 4.0), dpi=200)
+    colors = PALETTE_HEX[:n]
     
     # Donut chart
     wedges, texts, autotexts = ax.pie(
@@ -55,30 +59,36 @@ def generate_donut_chart_img(labels, values, title, temp_dir, filename="donut_ch
         startangle=140,
         colors=colors,
         pctdistance=0.75,
-        wedgeprops=dict(width=0.45, edgecolor='white', linewidth=2)
+        wedgeprops=dict(width=0.45, edgecolor='white', linewidth=2.5)
     )
     
-    # Styliser les pourcentages sur le camembert
+    # Styliser les pourcentages sur le donut
     for autotext in autotexts:
         autotext.set_color('white')
         autotext.set_fontsize(9.5)
         autotext.set_weight('bold')
     
-    # Légende soignée sur le côté
-    legend_labels = [f"{lbl} ({val} - {round(val/sum(values)*100, 1)}%)" for lbl, val in zip(labels, values)]
+    # Légende soignée sur le côté avec libellé complet wrappé
+    legend_labels = [
+        f"{textwrap.fill(lbl, 26)} : {val} répondants ({round(val/total_val*100, 1)}%)"
+        for lbl, val in zip(labels, values)
+    ]
     ax.legend(
         wedges, legend_labels,
-        title="Profils d'Acteurs",
+        title="Groupes d'Acteurs Interrogés",
         title_fontsize=9.5,
         loc="center left",
-        bbox_to_anchor=(0.95, 0, 0.5, 1),
+        bbox_to_anchor=(1.02, 0.5),
         fontsize=8.5,
         frameon=True,
         facecolor='#f8fafc',
-        edgecolor='#cbd5e1'
+        edgecolor='#cbd5e1',
+        borderpad=0.8,
+        labelspacing=0.6
     )
     
-    ax.set_title(title, fontsize=12, fontweight='bold', color='#1e1b4b', pad=15)
+    wrapped_title = textwrap.fill(title, 55)
+    ax.set_title(wrapped_title, fontsize=11.5, fontweight='bold', color='#1e1b4b', pad=15)
     plt.tight_layout()
     
     filepath = os.path.join(temp_dir, filename)
@@ -88,49 +98,64 @@ def generate_donut_chart_img(labels, values, title, temp_dir, filename="donut_ch
 
 
 def generate_question_pie_chart_img(tri_a_plat, title, temp_dir, filename="question_pie.png"):
-    """Génère un camembert HD pour le tri à plat d'une question à choix."""
+    """Génère un camembert HD pour le tri à plat d'une question — labels complets, légende lisible."""
     if not tri_a_plat:
         return None
-    
-    labels = [t['label'][:25] for t in tri_a_plat]
+
+    n = len(tri_a_plat)
     values = [t['count'] for t in tri_a_plat]
     if sum(values) == 0:
         return None
 
-    fig, ax = plt.subplots(figsize=(6.2, 3.4), dpi=200)
-    colors = PALETTE_HEX[:len(labels)]
-    
+    # Labels complets avec wrapping (pas de troncature)
+    labels = [textwrap.fill(t['label'], 28) for t in tri_a_plat]
+
+    # Taille dynamique : plus de modalités = figure plus haute
+    fig_h = max(4.5, 3.2 + n * 0.35)
+    fig_w = 8.5
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=200)
+    colors = PALETTE_HEX[:n]
+
     wedges, texts, autotexts = ax.pie(
         values,
         labels=None,
-        autopct='%1.1f%%',
+        autopct=lambda pct: f'{pct:.1f}%' if pct > 4 else '',
         startangle=90,
         colors=colors,
-        pctdistance=0.72,
-        wedgeprops=dict(edgecolor='white', linewidth=2)
+        pctdistance=0.78,
+        wedgeprops=dict(edgecolor='white', linewidth=2.5)
     )
-    
+
     for autotext in autotexts:
         autotext.set_color('white')
         autotext.set_fontsize(9)
         autotext.set_weight('bold')
-        
-    legend_labels = [f"{t['label'][:30]} : {t['count']} ({t['percentage']}%)" for t in tri_a_plat]
-    ax.legend(
+
+    # Légende complète avec label intégral, effectif et %
+    legend_labels = [
+        f"{textwrap.fill(t['label'], 32)}  →  {t['count']} rép. ({t['percentage']}%)"
+        for t in tri_a_plat
+    ]
+    leg = ax.legend(
         wedges, legend_labels,
-        title="Modalités de Réponse",
-        title_fontsize=9,
+        title="Répartition des réponses",
+        title_fontsize=9.5,
         loc="center left",
-        bbox_to_anchor=(0.95, 0, 0.5, 1),
-        fontsize=8,
+        bbox_to_anchor=(1.01, 0.5),
+        fontsize=8.5,
         frameon=True,
         facecolor='#f8fafc',
-        edgecolor='#cbd5e1'
+        edgecolor='#cbd5e1',
+        borderpad=0.8,
+        labelspacing=0.7,
     )
-    
-    ax.set_title(title[:60] + ('...' if len(title) > 60 else ''), fontsize=11, fontweight='bold', color='#1e1b4b', pad=12)
+    leg.get_title().set_fontweight('bold')
+
+    # Titre complet (avec wrapping si long)
+    wrapped_title = textwrap.fill(title, 72)
+    ax.set_title(wrapped_title, fontsize=10.5, fontweight='bold', color='#1e1b4b', pad=14)
+
     plt.tight_layout()
-    
     filepath = os.path.join(temp_dir, filename)
     plt.savefig(filepath, format='png', dpi=200, bbox_inches='tight')
     plt.close(fig)
@@ -138,39 +163,55 @@ def generate_question_pie_chart_img(tri_a_plat, title, temp_dir, filename="quest
 
 
 def generate_horizontal_bar_chart_img(tri_a_plat, title, temp_dir, filename="horizontal_bar.png"):
-    """Génère un diagramme en barres horizontales colorées avec étiquettes de pourcentages."""
+    """Génère un diagramme en barres horizontales avec labels complets et pourcentages explicites."""
     if not tri_a_plat:
         return None
-    
-    labels = [t['label'][:35] for t in reversed(tri_a_plat[:7])]
-    percentages = [t['percentage'] for t in reversed(tri_a_plat[:7])]
-    counts = [t['count'] for t in reversed(tri_a_plat[:7])]
-    
-    fig, ax = plt.subplots(figsize=(6.5, 3.2), dpi=200)
-    bars = ax.barh(labels, percentages, color='#4f46e5', height=0.55, edgecolor='none')
-    
-    # Colorer les barres en dégradé ou palette
-    for idx, bar in enumerate(bars):
-        bar.set_color(PALETTE_HEX[idx % len(PALETTE_HEX)])
-        
-    ax.set_xlim(0, max(100, max(percentages) + 15) if percentages else 100)
+
+    # On garde les 10 premières modalités max, triées par fréquence décroissante
+    items = sorted(tri_a_plat, key=lambda x: x['percentage'], reverse=True)[:10]
+    items_reversed = list(reversed(items))  # barres : la plus fréquente en haut
+
+    # Labels complets wrappés (pas de troncature)
+    labels = [textwrap.fill(t['label'], 30) for t in items_reversed]
+    percentages = [t['percentage'] for t in items_reversed]
+    counts = [t['count'] for t in items_reversed]
+
+    # Hauteur dynamique selon le nombre de barres
+    n = len(labels)
+    fig_h = max(3.8, 1.2 + n * 0.52)
+    # Marge gauche adaptée à la longueur max des labels
+    max_label_chars = max(len(lbl.split('\n')[0]) for lbl in labels) if labels else 20
+    left_margin = min(0.42, 0.18 + max_label_chars * 0.006)
+
+    fig, ax = plt.subplots(figsize=(8.5, fig_h), dpi=200)
+    bars = ax.barh(range(n), percentages, color=[PALETTE_HEX[i % len(PALETTE_HEX)] for i in range(n)],
+                   height=0.6, edgecolor='none')
+
+    ax.set_yticks(range(n))
+    ax.set_yticklabels(labels, fontsize=8.5, color='#1e293b')
+
+    ax.set_xlim(0, max(100, max(percentages) + 18) if percentages else 100)
     ax.set_xlabel('Part des répondants (%)', fontsize=8.5, color='#64748b', labelpad=8)
-    ax.set_title(title[:60] + ('...' if len(title) > 60 else ''), fontsize=10.5, fontweight='bold', color='#1e1b4b', pad=12)
-    
-    # Affichage des étiquettes de données
+
+    # Titre complet
+    wrapped_title = textwrap.fill(title, 70)
+    ax.set_title(wrapped_title, fontsize=10.5, fontweight='bold', color='#1e1b4b', pad=12)
+
+    # Étiquettes de données : effectif + %
     for bar, pct, cnt in zip(bars, percentages, counts):
         width = bar.get_width()
-        ax.text(width + 1.5, bar.get_y() + bar.get_height() / 2, f"{pct}% (N={cnt})",
+        ax.text(width + 1.2, bar.get_y() + bar.get_height() / 2,
+                f"{pct}%  (N = {cnt})",
                 va='center', ha='left', fontsize=8.5, fontweight='bold', color='#1e1b4b')
-        
+
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_color('#cbd5e1')
     ax.spines['bottom'].set_color('#cbd5e1')
     ax.xaxis.grid(True, linestyle='--', alpha=0.4, color='#cbd5e1')
     ax.set_axisbelow(True)
-    plt.tight_layout()
-    
+
+    plt.subplots_adjust(left=left_margin, right=0.85, top=0.88, bottom=0.12)
     filepath = os.path.join(temp_dir, filename)
     plt.savefig(filepath, format='png', dpi=200, bbox_inches='tight')
     plt.close(fig)
@@ -178,51 +219,59 @@ def generate_horizontal_bar_chart_img(tri_a_plat, title, temp_dir, filename="hor
 
 
 def generate_crosstab_grouped_bar_img(question_stats, temp_dir, filename="crosstab_grouped_bar.png"):
-    """Génère un grand diagramme en barres groupées comparatives par catégorie d'acteur."""
+    """Génère un diagramme en barres groupées comparatives par catégorie d'acteur — labels complets."""
     ct = question_stats.get('cross_tabulation')
     if not ct or not ct.get('actors'):
         return None
-    
+
     actors = ct['actors']
-    categories = ct.get('categories', [])[:5]  # Top 5 modalités
+    categories = ct.get('categories', [])[:6]  # Top 6 modalités
     if not categories:
         return None
-    
+
     import numpy as np
+
+    # Labels complets wrappés
+    cat_labels = [textwrap.fill(c, 22) for c in categories]
+
     x = np.arange(len(categories))
-    width = min(0.18, 0.75 / len(actors))
-    
-    fig, ax = plt.subplots(figsize=(7.2, 3.6), dpi=200)
-    
+    width = min(0.18, 0.72 / max(1, len(actors)))
+
+    fig_h = max(4.0, 3.0 + len(categories) * 0.18)
+    fig, ax = plt.subplots(figsize=(9.0, fig_h), dpi=200)
+
     for i, act in enumerate(actors):
         pcts = [ct['row_percentages'].get(cat, {}).get(act, 0) for cat in categories]
         color = ACTOR_HEX.get(act, PALETTE_HEX[i % len(PALETTE_HEX)])
-        rects = ax.bar(x + (i - len(actors)/2 + 0.5) * width, pcts, width, label=act, color=color, edgecolor='white', linewidth=1)
-        
-        # Étiquettes de pourcentages au-dessus des barres
+        rects = ax.bar(x + (i - len(actors) / 2 + 0.5) * width, pcts, width,
+                       label=act, color=color, edgecolor='white', linewidth=1)
+
         for r in rects:
             h = r.get_height()
-            if h > 8:
+            if h > 5:
                 ax.annotate(f"{int(round(h))}%",
                             xy=(r.get_x() + r.get_width() / 2, h),
                             xytext=(0, 2), textcoords="offset points",
-                            ha='center', va='bottom', fontsize=7, fontweight='bold', color='#334155')
+                            ha='center', va='bottom', fontsize=7.5, fontweight='bold', color='#334155')
 
-    ax.set_ylabel('Adhésion au sein du groupe (%)', fontsize=8.5, color='#64748b')
-    ax.set_title(f"Tris Croisés : « {question_stats['question_text'][:65]}... »", fontsize=10.5, fontweight='bold', color='#1e1b4b', pad=12)
+    ax.set_ylabel('Part au sein du groupe (%)', fontsize=9, color='#64748b')
+    q_text = textwrap.fill(question_stats['question_text'], 65)
+    ax.set_title(f"Tris Croisés par Catégorie d'Acteur\n« {q_text} »",
+                 fontsize=10, fontweight='bold', color='#1e1b4b', pad=12)
     ax.set_xticks(x)
-    ax.set_xticklabels([c[:20] for c in categories], fontsize=8.5, fontweight='600', color='#1e1b4b')
-    ax.set_ylim(0, 115)
-    
-    ax.legend(loc='upper right', fontsize=8, frameon=True, facecolor='#f8fafc', edgecolor='#cbd5e1')
+    ax.set_xticklabels(cat_labels, fontsize=8.5, fontweight='600', color='#1e1b4b',
+                       ha='center', wrap=True)
+    ax.set_ylim(0, 118)
+
+    ax.legend(loc='upper right', fontsize=8.5, frameon=True, facecolor='#f8fafc', edgecolor='#cbd5e1')
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_color('#cbd5e1')
     ax.spines['bottom'].set_color('#cbd5e1')
     ax.yaxis.grid(True, linestyle='--', alpha=0.4, color='#cbd5e1')
     ax.set_axisbelow(True)
+
     plt.tight_layout()
-    
     filepath = os.path.join(temp_dir, filename)
     plt.savefig(filepath, format='png', dpi=200, bbox_inches='tight')
     plt.close(fig)
@@ -546,28 +595,28 @@ def generate_advanced_statistics_pdf(project_id, filepath, questionnaire_id=None
 
     try:
         # 1. Génération du Donut Chart HD Répartition Acteurs
-        actor_labels = [a['label'] for a in stats_data['actors_distribution']]
-        actor_counts = [a['count'] for a in stats_data['actors_distribution']]
+        actor_labels = [a['label'] for a in stats_data.get('actors_distribution', [])]
+        actor_counts = [a['count'] for a in stats_data.get('actors_distribution', [])]
         actors_chart_path = generate_donut_chart_img(
             actor_labels, actor_counts,
             "Répartition de l'Échantillon par Catégorie d'Acteur",
             temp_dir, "donut_actors.png"
         )
 
-        # 2. Génération des graphiques par question (Camembert ou Barres horizontales)
+        # 2. Génération des graphiques par question (Camembert ou Barres horizontales pour toutes les questions clés)
         question_charts = {}
-        for idx_q, qs in enumerate(q_stats[:6], 1):  # 6 questions clés
+        for idx_q, qs in enumerate(q_stats[:10], 1):  # jusqu'à 10 questions clés
             if qs.get('tri_a_plat'):
                 if len(qs['tri_a_plat']) <= 4:
                     q_chart_file = generate_question_pie_chart_img(
                         qs['tri_a_plat'],
-                        f"Q{idx_q}. Distribution des Réponses",
+                        f"Q{idx_q}. {qs['question_text']}",
                         temp_dir, f"q_{idx_q}_pie.png"
                     )
                 else:
                     q_chart_file = generate_horizontal_bar_chart_img(
                         qs['tri_a_plat'],
-                        f"Q{idx_q}. Distribution des Réponses",
+                        f"Q{idx_q}. {qs['question_text']}",
                         temp_dir, f"q_{idx_q}_bar.png"
                     )
                 if q_chart_file:
@@ -593,54 +642,85 @@ def generate_advanced_statistics_pdf(project_id, filepath, questionnaire_id=None
         pdf.alias_nb_pages()
         pdf.add_page()
 
-        # En-tête Prestigieux
-        pdf.set_font('helvetica', 'B', 17)
+        # =====================================================================
+        # PAGE DE TITRE & EN-TÊTE INSTITUTIONNEL
+        # =====================================================================
+        pdf.set_font('helvetica', 'B', 16)
         pdf.set_text_color(30, 27, 75)
-        pdf.cell(0, 11, "RAPPORT D'ANALYSE STATISTIQUE & ORIENTATIONS STRATÉGIQUES", 0, 1, 'C')
-        
-        pdf.set_font('helvetica', '', 9.5)
+        pdf.cell(0, 9, "RAPPORT D'ANALYSE STATISTIQUE & ORIENTATIONS STRATÉGIQUES", 0, 1, 'C')
+
+        pdf.set_font('helvetica', 'I', 10.5)
+        pdf.set_text_color(79, 70, 229)
+        pdf.cell(0, 6, "Évaluation Quantitative, Inspection des Données et Aide à la Décision Bailleurs", 0, 1, 'C')
+
+        pdf.set_font('helvetica', '', 9)
         pdf.set_text_color(100, 116, 139)
-        pdf.cell(0, 5, f"Projet : {stats_data['project_name']} | Échantillon consolidé : N = {stats_data['total_sessions']} répondants", 0, 1, 'C')
-        pdf.cell(0, 5, f"Généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')} — Changement Social Bénin (CSB)", 0, 1, 'C')
-        pdf.ln(5)
+        pdf.cell(0, 5, f"Projet : {stats_data['project_name']} | Échantillon total consolidé : N = {stats_data['total_sessions']} répondants", 0, 1, 'C')
+        pdf.cell(0, 5, f"Édité le {datetime.now().strftime('%d/%m/%Y à %H:%M')} — Changement Social Bénin (CSB)", 0, 1, 'C')
+        pdf.ln(4)
 
         # =====================================================================
-        # CHAPITRE 1 : CONTEXTE DES DONNÉES & CAMEMBERT DE POPULATION
+        # CHAPITRE 1 : CONTEXTE DES DONNÉES & CADRE MÉTHODOLOGIQUE
         # =====================================================================
         pdf.chapter_title("1. Contexte des Données & Cadre Méthodologique")
-        pdf.set_font('helvetica', '', 9)
+        pdf.set_font('helvetica', '', 8.8)
         pdf.set_text_color(40, 40, 40)
-        pdf.multi_cell(0, 4.5, (
-            f"Le présent rapport synthétise l'audit statistique et l'évaluation quantitative conduits par Changement Social Bénin. "
-            f"L'unité d'observation correspond aux {context.get('observation_unit', 'entretiens de terrain')}, recueillis sur la période "
-            f"allant du {context.get('period_start', 'N/A')} au {context.get('period_end', 'N/A')}. "
-            f"L'analyse porte sur un échantillon total de N = {context.get('total_records', 0)} formulaires structurés autour de "
-            f"{context.get('variables_count', 0)} variables d'évaluation clés."
+        pdf.multi_cell(0, 4.3, (
+            "Ce premier chapitre pose les bases méthodologiques et le cadre d'observation de l'évaluation quantitative. "
+            "Il explicite la source institutionnelle des données recueillies, l'ancrage territorial et temporel, ainsi que "
+            "la nature des populations interrogées. La ventilation par catégorie d'acteurs ci-dessous garantit la représentativité "
+            "et l'équilibre des perspectives entre bénéficiaires finaux, autorités locales, équipes de terrain et partenaires techniques."
         ))
-        pdf.ln(3)
+        pdf.ln(2.5)
 
-        # Insertion du Camembert / Donut Chart HD des Acteurs
+        # Tableau des métadonnées contextuelles
+        pdf.set_font('helvetica', '', 8.5)
+        with pdf.table(col_widths=(60, 120), text_align=("LEFT", "LEFT")) as table:
+            r = table.row()
+            r.cell("Source institutionnelle")
+            r.cell(str(context.get('source', 'Plateforme S&E-CSB')))
+            r = table.row()
+            r.cell("Période de collecte couverte")
+            r.cell(f"Du {context.get('period_start', 'N/A')} au {context.get('period_end', 'N/A')}")
+            r = table.row()
+            r.cell("Unité d'observation & Population")
+            r.cell(f"{context.get('observation_unit', 'Session individuelle')} ({context.get('population_target', 'Acteurs multiples')})")
+            r = table.row()
+            r.cell("Volume de l'échantillon analysé")
+            r.cell(f"N = {context.get('total_records', 0)} formulaires/entretiens | {context.get('variables_count', 0)} variables clés")
+
+        # Insertion du Donut Chart HD des Acteurs
         if actors_chart_path and os.path.exists(actors_chart_path):
+            if pdf.get_y() > 195:
+                pdf.add_page()
             pdf.ln(2)
-            # Centrer l'image
             img_w = 145
             x_center = (210 - img_w) / 2
             pdf.image(actors_chart_path, x=x_center, y=pdf.get_y(), w=img_w)
-            pdf.ln(80)  # Hauteur occupée par l'image
+            pdf.ln(78)
+
+            pdf.set_font('helvetica', 'I', 8)
+            pdf.set_text_color(100, 116, 139)
+            pdf.multi_cell(0, 3.8, (
+                "Commentaire d'échantillonnage : La ventilation ci-dessus illustre la composition de la population d'enquête. "
+                "La présence conjointe des bénéficiaires et des acteurs institutionnels permet une analyse croisée robuste "
+                "évitant tout biais de source unique."
+            ))
         pdf.ln(4)
 
         # =====================================================================
         # CHAPITRE 2 : INSPECTION, AUDIT QUALITÉ & NETTOYAGE DES DONNÉES
         # =====================================================================
+        if pdf.get_y() > 210:
+            pdf.add_page()
         pdf.chapter_title("2. Audit Qualité, Inspection & Nettoyage des Données")
-        pdf.set_font('helvetica', '', 9)
+        pdf.set_font('helvetica', '', 8.8)
         pdf.set_text_color(40, 40, 40)
-        pdf.multi_cell(0, 4.5, (
-            f"Avant tout traitement décisionnel, une phase d'audit d'intégrité a été réalisée sur la matrice brute de "
-            f"{audit.get('rows_count', 0)} lignes x {audit.get('columns_count', 0)} colonnes ({audit.get('total_cells', 0)} cellules). "
-            f"Le taux de complétude global s'établit à {audit.get('completeness_rate', 0)}% (taux d'attrition de {audit.get('missing_rate', 0)}%). "
-            f"Le contrôle de redondance signale {audit.get('duplicate_sessions_detected', 0)} doublon(s) potentiel(s). "
-            f"Le score de santé globale des données s'élève à {audit.get('quality_score', 0)} / 100 ({audit.get('data_health_status', 'Validé')})."
+        pdf.multi_cell(0, 4.3, (
+            "Avant d'engager toute modélisation statistique ou formulation de recommandations, un protocole strict d'audit "
+            "d'intégrité et de nettoyage des données est exécuté. Cette étape vérifie l'exhaustivité de la collecte (complétude), "
+            "l'absence de doublons artificiels et la cohérence générale de la matrice d'information. Les quatre indicateurs "
+            "synthétiques ci-dessous certifient la conformité aux exigences des bailleurs de fonds."
         ))
         pdf.ln(3)
 
@@ -648,6 +728,7 @@ def generate_advanced_statistics_pdf(project_id, filepath, questionnaire_id=None
         kpi_w = 44
         pdf.set_fill_color(243, 244, 246)
         pdf.set_font('helvetica', 'B', 10.5)
+        pdf.set_text_color(30, 27, 75)
         pdf.cell(kpi_w, 7, f" {audit.get('completeness_rate', 0)}%", 1, 0, 'C', fill=True)
         pdf.cell(4, 7, "", 0, 0)
         pdf.cell(kpi_w, 7, f" {audit.get('missing_rate', 0)}%", 1, 0, 'C', fill=True)
@@ -665,61 +746,104 @@ def generate_advanced_statistics_pdf(project_id, filepath, questionnaire_id=None
         pdf.cell(kpi_w, 4, "Doublons Détectés", 0, 0, 'C')
         pdf.cell(4, 4, "", 0, 0)
         pdf.cell(kpi_w, 4, "Score Santé Données", 0, 1, 'C')
-        pdf.ln(6)
+        pdf.ln(3)
+
+        pdf.set_font('helvetica', 'I', 8.2)
+        pdf.set_text_color(67, 56, 202)
+        pdf.multi_cell(0, 4, (
+            f"Verdict d'intégrité : La base de données analysée comprend {audit.get('rows_count', 0)} observations et "
+            f"{audit.get('columns_count', 0)} variables ({audit.get('total_cells', 0)} cellules analysées). "
+            f"Avec un score de santé de {audit.get('quality_score', 0)}/100, la base est déclarée « {audit.get('data_health_status', 'Validée')} » "
+            f"et offre une fiabilité statistique optimale pour les décisions programmatiques."
+        ))
+        pdf.ln(4)
 
         # =====================================================================
         # CHAPITRE 3 : STATISTIQUES DESCRIPTIVES AVEC CAMEMBERTS & DIAGRAMMES
         # =====================================================================
         pdf.add_page()
         pdf.chapter_title("3. Statistiques Descriptives Univariées (Graphiques & Tris à Plat)")
+        pdf.set_font('helvetica', '', 8.8)
+        pdf.set_text_color(40, 40, 40)
+        pdf.multi_cell(0, 4.3, (
+            "L'analyse descriptive univariée examine chaque variable de façon autonome afin d'identifier la répartition des avis, "
+            "la modalité dominante (mode statistique) et le degré d'adhésion collective. Pour chaque question, un tableau d'effectifs "
+            "complet (sans libellé tronqué) est couplé à une visualisation graphique haute définition et à une interprétation analytique ciblée."
+        ))
+        pdf.ln(3)
 
         for idx_q, qs in enumerate(q_stats, 1):
-            if pdf.get_y() > 185:
+            if pdf.get_y() > 175:
                 pdf.add_page()
 
+            # Titre complet de la question (aucun rognage)
             pdf.set_font('helvetica', 'B', 10)
             pdf.set_text_color(30, 27, 75)
-            pdf.multi_cell(0, 4.5, f"Q{idx_q}. {qs['question_text']}")
+            pdf.multi_cell(0, 4.5, f"Question {idx_q} : {qs['question_text']}")
             
-            pdf.set_font('helvetica', 'I', 8)
-            pdf.set_text_color(107, 114, 128)
+            # Métriques univariées d'en-tête
             cat_m = qs.get('categorical_metrics', {})
-            cat_info = f"Mode : « {cat_m.get('mode')} » ({cat_m.get('mode_freq_percent')}%) | Diversité : {cat_m.get('diversity_index')}" if cat_m else ""
-            pdf.cell(0, 4, f"Effectif total : N = {qs['total_answers']} | {cat_info}", 0, 1, 'L')
+            mode_val = cat_m.get('mode', 'N/A')
+            mode_pct = cat_m.get('mode_freq_percent', 0)
+            mode_cnt = cat_m.get('mode_freq_count', 0)
+            diversity = cat_m.get('diversity_index', 'N/A')
+
+            pdf.set_font('helvetica', 'I', 8)
+            pdf.set_text_color(100, 116, 139)
+            pdf.cell(0, 4, f"Effectif total valide : N = {qs['total_answers']} répondants | Mode dominant : « {mode_val} » ({mode_pct}%) | Diversité : {diversity}", 0, 1, 'L')
             pdf.ln(1.5)
 
-            # Tableau des fréquences
-            pdf.set_font('helvetica', 'B', 8)
-            pdf.set_fill_color(224, 231, 255)
-            pdf.set_text_color(30, 27, 75)
-            pdf.cell(90, 4.8, "  Modalité / Option de Réponse", 1, 0, 'L', fill=True)
-            pdf.cell(25, 4.8, "Effectif (N)", 1, 0, 'C', fill=True)
-            pdf.cell(25, 4.8, "Part (%)", 1, 1, 'C', fill=True)
-
+            # Tableau des fréquences FPDF2 avec retour à la ligne automatique (AUCUNE COUPURE)
             pdf.set_font('helvetica', '', 8)
-            pdf.set_text_color(33, 33, 33)
-            for item in qs['tri_a_plat']:
-                pdf.cell(90, 4.5, f"  {item['label'][:45]}", 1, 0, 'L')
-                pdf.cell(25, 4.5, f"{item['count']}", 1, 0, 'C')
-                pdf.cell(25, 4.5, f"{item['percentage']}%", 1, 1, 'C')
+            with pdf.table(col_widths=(115, 30, 35), text_align=("LEFT", "CENTER", "CENTER")) as table:
+                hdr = table.row()
+                hdr.cell("Modalité / Option de Réponse")
+                hdr.cell("Effectif (N)")
+                hdr.cell("Part Relative (%)")
+                for item in qs['tri_a_plat']:
+                    r = table.row()
+                    r.cell(str(item['label']))  # Libellé intégral
+                    r.cell(str(item['count']))
+                    r.cell(f"{item['percentage']}%")
+            pdf.ln(2)
 
-            # Insertion du Camembert ou Diagramme en Barres pour cette question
+            # Insertion du graphique HD (Camembert ou Diagramme en Barres)
             q_chart = question_charts.get(qs['question_id'])
             if q_chart and os.path.exists(q_chart):
-                if pdf.get_y() > 200:
+                if pdf.get_y() > 195:
                     pdf.add_page()
-                pdf.ln(2)
-                img_w = 135
+                img_w = 142
                 x_center = (210 - img_w) / 2
                 pdf.image(q_chart, x=x_center, y=pdf.get_y(), w=img_w)
-                pdf.ln(70)
+                pdf.ln(72)
 
-            # Paramètres numériques si applicables
+            # Synthèse analytique automatique sous le graphique
+            pdf.set_font('helvetica', 'I', 8)
+            pdf.set_text_color(30, 27, 75)
+            if mode_pct >= 60.0:
+                interpretation = (
+                    f"Synthèse analytique : Très forte convergence de l'échantillon vers l'option « {mode_val} », "
+                    f"qui réunit {mode_pct}% des suffrages ({mode_cnt} répondants). Ce résultat témoigne d'un consensus manifeste."
+                )
+            elif mode_pct >= 40.0:
+                interpretation = (
+                    f"Synthèse analytique : L'option « {mode_val} » arrive en tête avec {mode_pct}% des réponses ({mode_cnt} avis), "
+                    f"mais coexiste avec des avis minoritaires notables nécessitant une attention programmatique ciblée."
+                )
+            else:
+                interpretation = (
+                    f"Synthèse analytique : Les opinions sont fragmentées (modalité prédominante « {mode_val} » à seulement {mode_pct}%). "
+                    f"Aucune option ne recueille la majorité absolue, révélant une diversité d'expériences sur le terrain."
+                )
+            pdf.multi_cell(0, 3.8, interpretation)
+
+            # Paramètres numériques si applicables (ex: note de 1 à 5)
             num_s = qs.get('numeric_stats')
             if num_s:
+                pdf.ln(1)
                 pdf.set_font('helvetica', 'B', 7.5)
                 pdf.set_text_color(67, 56, 202)
-                pdf.cell(0, 4.5, (
+                pdf.cell(0, 4, (
                     f"Paramètres numériques : Moyenne = {num_s['mean']} | Médiane = {num_s['median']} | "
                     f"Q1 = {num_s['q1']} | Q3 = {num_s['q3']} | IQR = {num_s['iqr']} | Écart-type = {num_s['std_dev']} | "
                     f"Étendue = [{num_s['min']} - {num_s['max']}]"
@@ -733,77 +857,88 @@ def generate_advanced_statistics_pdf(project_id, filepath, questionnaire_id=None
         pdf.add_page()
         pdf.chapter_title("4. Exploration des Relations Bivariées & Tris Croisés")
         
-        pdf.set_font('helvetica', 'B', 8.5)
+        pdf.set_font('helvetica', '', 8.8)
+        pdf.set_text_color(40, 40, 40)
+        pdf.multi_cell(0, 4.3, (
+            "L'exploration des relations bivariées confronte les réponses aux profils des répondants (Bénéficiaires, Autorités, "
+            "Équipe Projet, Partenaires). Cette étape est déterminante pour vérifier si les choix exprimés sont partagés de façon "
+            "homogène ou s'il existe des fractures perceptuelles significatives entre parties prenantes."
+        ))
+        pdf.ln(2.5)
+
+        pdf.set_font('helvetica', 'B', 8.2)
         pdf.set_text_color(185, 28, 28)
-        pdf.cell(0, 5, "[!] MISE EN GARDE MÉTHODOLOGIQUE :", 0, 1, 'L')
+        pdf.cell(0, 4.5, "[!] MISE EN GARDE MÉTHODOLOGIQUE :", 0, 1, 'L')
         pdf.set_font('helvetica', 'I', 8)
         pdf.set_text_color(60, 60, 60)
-        pdf.multi_cell(0, 4, (
-            "Les croisements de variables ci-dessous décrivent les associations empiriques entre les catégories d'acteurs et les choix de réponses. "
-            "Une corrélation ou divergence statistique observée ne constitue pas automatiquement une relation de cause à effet directe."
+        pdf.multi_cell(0, 3.8, (
+            "Une corrélation ou divergence statistique observée entre groupes d'acteurs ne démontre pas automatiquement une relation "
+            "de cause à effet directe. Elle constitue un indicateur de vigilance et une piste pour le dialogue social du projet."
         ))
-        pdf.ln(3)
+        pdf.ln(2.5)
 
         # Insertion du Diagramme en Barres Groupées des Tris Croisés
         if crosstab_chart_path and os.path.exists(crosstab_chart_path):
             img_w = 155
             x_center = (210 - img_w) / 2
             pdf.image(crosstab_chart_path, x=x_center, y=pdf.get_y(), w=img_w)
-            pdf.ln(78)
-            pdf.ln(3)
+            pdf.ln(80)
+            pdf.ln(2)
 
         for idx_q, qs in enumerate(q_stats, 1):
             ct = qs.get('cross_tabulation')
             if not ct or not ct.get('actors'):
                 continue
 
-            if pdf.get_y() > 230:
+            if pdf.get_y() > 210:
                 pdf.add_page()
 
-            pdf.set_font('helvetica', 'B', 9)
+            pdf.set_font('helvetica', 'B', 9.5)
             pdf.set_text_color(30, 27, 75)
-            pdf.multi_cell(0, 4.5, f"Croisement Q{idx_q} : « {qs['question_text'][:80]}... »")
+            pdf.multi_cell(0, 4.5, f"Tris Croisés Q{idx_q} : {qs['question_text']}")
             
+            # Signaler les divergences significatives
             if qs.get('divergences'):
-                pdf.set_font('helvetica', 'I', 7.5)
+                pdf.set_font('helvetica', 'I', 7.8)
                 pdf.set_text_color(185, 28, 28)
                 for d in qs['divergences']:
-                    pdf.multi_cell(0, 3.8, f"  * {d}")
+                    pdf.multi_cell(0, 3.8, f"  * Divergence clé : {d}")
             pdf.ln(1)
 
             actors = ct['actors'][:4]
-            col_w = min(28, int(115 / max(1, len(actors))))
-            
-            pdf.set_font('helvetica', 'B', 7.5)
-            pdf.set_fill_color(237, 233, 254)
-            pdf.set_text_color(49, 46, 129)
-            pdf.cell(65, 4.5, "Modalité de Réponse", 1, 0, 'L', fill=True)
-            for act in actors:
-                pdf.cell(col_w, 4.5, act[:15], 1, 0, 'C', fill=True)
-            pdf.ln()
+            col_mod_w = 70
+            col_act_w = int((180 - col_mod_w) / max(1, len(actors)))
+            col_widths = [col_mod_w] + [col_act_w] * len(actors)
+            col_widths[0] = 180 - sum(col_widths[1:])
+            aligns = ["LEFT"] + ["CENTER"] * len(actors)
 
             pdf.set_font('helvetica', '', 7.5)
-            pdf.set_text_color(33, 33, 33)
-            for cat in ct.get('categories', [])[:5]:
-                pdf.cell(65, 4.2, f"  {cat[:32]}", 1, 0, 'L')
+            with pdf.table(col_widths=tuple(col_widths), text_align=tuple(aligns)) as table:
+                hdr = table.row()
+                hdr.cell("Modalité de Réponse")
                 for act in actors:
-                    cnt = ct['matrix'].get(cat, {}).get(act, 0)
-                    row_pct = ct['row_percentages'].get(cat, {}).get(act, 0)
-                    pdf.cell(col_w, 4.2, f"{cnt} ({row_pct}%)", 1, 0, 'C')
-                pdf.ln()
+                    hdr.cell(str(act))
+                for cat in ct.get('categories', []):
+                    r = table.row()
+                    r.cell(str(cat))
+                    for act in actors:
+                        cnt = ct['matrix'].get(cat, {}).get(act, 0)
+                        row_pct = ct['row_percentages'].get(cat, {}).get(act, 0)
+                        r.cell(f"{cnt} ({row_pct}%)")
 
-            pdf.ln(3)
+            pdf.ln(4)
 
         # =====================================================================
         # CHAPITRE 5 : NOTE EXPLORATOIRE & HYPOTHÈSES ANALYTIQUES
         # =====================================================================
         pdf.add_page()
         pdf.chapter_title("5. Note Exploratoire & Formulation d'Hypothèses")
-        pdf.set_font('helvetica', '', 9)
+        pdf.set_font('helvetica', '', 8.8)
         pdf.set_text_color(40, 40, 40)
-        pdf.multi_cell(0, 4.5, (
-            "À partir des régularités et des fractures constatées dans les données, l'équipe M&E pose les questions "
-            "exploratoires suivantes afin d'éclairer les mécanismes sous-jacents :"
+        pdf.multi_cell(0, 4.3, (
+            "La note exploratoire constitue l'étape d'interprétation qualitative des constats chiffrés. À partir des régularités, "
+            "des anomalies et des fractures identifiées dans les étapes précédentes, l'équipe d'évaluation formule des hypothèses "
+            "explicatives destinées à orienter les investigations complémentaires et à nourrir la réflexion stratégique."
         ))
         pdf.ln(2.5)
 
@@ -818,7 +953,7 @@ def generate_advanced_statistics_pdf(project_id, filepath, questionnaire_id=None
 
         # Insertion du graphique temporel si disponible
         if temporal_chart_path and os.path.exists(temporal_chart_path):
-            if pdf.get_y() > 210:
+            if pdf.get_y() > 205:
                 pdf.add_page()
             pdf.ln(2)
             img_w = 145
@@ -827,13 +962,13 @@ def generate_advanced_statistics_pdf(project_id, filepath, questionnaire_id=None
             pdf.ln(60)
 
         # Limites des données
-        pdf.set_font('helvetica', 'B', 9.5)
+        pdf.set_font('helvetica', 'B', 9)
         pdf.set_text_color(67, 56, 202)
         pdf.cell(0, 5, "Limites méthodologiques & précautions d'interprétation :", 0, 1, 'L')
-        pdf.set_font('helvetica', '', 8.5)
+        pdf.set_font('helvetica', '', 8)
         pdf.set_text_color(40, 40, 40)
         for lim in note.get('limits', []):
-            pdf.multi_cell(0, 4.2, f"  - {lim}")
+            pdf.multi_cell(0, 3.8, f"  - {lim}")
         pdf.ln(4)
 
         # =====================================================================
@@ -841,11 +976,12 @@ def generate_advanced_statistics_pdf(project_id, filepath, questionnaire_id=None
         # =====================================================================
         pdf.add_page()
         pdf.chapter_title("6. Propositions de Solutions & Plan d'Action Opérationnel (M&E / Bailleurs)")
-        pdf.set_font('helvetica', '', 9)
+        pdf.set_font('helvetica', '', 8.8)
         pdf.set_text_color(40, 40, 40)
-        pdf.multi_cell(0, 4.5, (
-            "En réponse directe aux constats statistiques et aux hypothèses formulées, voici la matrice opérationnelle "
-            "des mesures d'ingénierie de projet priorisées pour Changement Social Bénin :"
+        pdf.multi_cell(0, 4.3, (
+            "Ce dernier chapitre traduit directement les constats statistiques en un plan d'action opérationnel hiérarchisé. "
+            "Chaque faiblesse ou écart identifié fait l'objet d'une solution concrète, assortie d'un niveau de priorité d'intervention, "
+            "d'acteurs désignés responsables, d'un calendrier indicatif d'exécution et d'un indicateur de résultat mesurable."
         ))
         pdf.ln(3)
 
