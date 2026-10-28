@@ -4173,6 +4173,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     method: 'POST',
                     body: formData
                 });
+                if (!response.ok) {
+                    const errText = await response.text();
+                    try {
+                        const errJson = JSON.parse(errText);
+                        showToast(errJson.message || "Erreur lors de l'ingestion.", "error");
+                    } catch (e) {
+                        showToast("Erreur serveur (" + response.status + ") : " + errText.substring(0, 100), "error");
+                    }
+                    return;
+                }
                 const data = await response.json();
 
                 if (progressBar) progressBar.style.width = '100%';
@@ -4180,6 +4190,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (data.success) {
                     showToast(data.message, "success");
+                    if (data.questionnaire_id) {
+                        activeQuestionnaireId = data.questionnaire_id;
+                    }
+                    await loadQuestionnairesList();
                     if (resultsBox && resultsMsg) {
                         resultsBox.style.display = 'block';
                         resultsMsg.innerHTML = `🎉 <strong>Succès !</strong> ${data.message}`;
@@ -4261,6 +4275,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     method: 'POST',
                     body: formData
                 });
+                if (!response.ok) {
+                    const errText = await response.text();
+                    try {
+                        const errJson = JSON.parse(errText);
+                        showToast(errJson.message || "Erreur lors de l'import Excel.", "error");
+                    } catch (e) {
+                        showToast("Erreur serveur (" + response.status + ") : " + errText.substring(0, 100), "error");
+                    }
+                    return;
+                }
                 const data = await response.json();
                 if (data.success) {
                     showToast(data.message, "success");
@@ -4422,10 +4446,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 showLoader();
-                const response = await fetch(`/api/projects/${activeProjectId}/batch-import-pdfs`, {
+                const response = await fetch(`/api/projects/${activeProjectId}/batch-upload-pdf`, {
                     method: 'POST',
                     body: formData
                 });
+                if (!response.ok) {
+                    const errText = await response.text();
+                    try {
+                        const errJson = JSON.parse(errText);
+                        showToast(errJson.message || "Erreur lors de l'ingestion.", "error");
+                    } catch (e) {
+                        showToast("Erreur serveur (" + response.status + ") : " + errText.substring(0, 100), "error");
+                    }
+                    return;
+                }
                 const data = await response.json();
                 if (progressBar) progressBar.style.width = '100%';
                 if (progressPct) progressPct.textContent = '100%';
@@ -4435,10 +4469,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     hubSelectedPDFs = [];
                     if (hubPdfSelectedInfo) {
                         hubPdfSelectedInfo.style.display = 'block';
-                        hubPdfSelectedInfo.textContent = `✅ Succès : ${data.imported_sessions} formulaires traités avec succès.`;
+                        hubPdfSelectedInfo.textContent = `✅ Succès : ${data.imported_sessions || 0} formulaires traités avec succès.`;
                     }
+                    if (data.questionnaire_id) {
+                        activeQuestionnaireId = data.questionnaire_id;
+                    }
+                    await loadQuestionnairesList();
                     await loadDashboardData();
                     loadAdvancedStatistics(true);
+                    document.dispatchEvent(new CustomEvent('dataChanged', { detail: 'batch-pdf-imported' }));
                 } else {
                     showToast(data.message || "Erreur lors de l'ingestion.", "error");
                 }
@@ -4537,6 +4576,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     method: 'POST',
                     body: formData
                 });
+                if (!response.ok) {
+                    const errText = await response.text();
+                    try {
+                        const errJson = JSON.parse(errText);
+                        showToast(errJson.message || "Erreur lors de l'import Excel.", "error");
+                    } catch (e) {
+                        showToast("Erreur serveur (" + response.status + ") : " + errText.substring(0, 100), "error");
+                    }
+                    return;
+                }
                 const data = await response.json();
                 if (data.success) {
                     showToast(data.message, "success");

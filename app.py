@@ -1022,6 +1022,8 @@ def create_app():
         return jsonify({'success': True, 'data': stats})
 
     @app.route('/api/projects/<int:project_id>/batch-upload-pdf', methods=['POST'])
+    @app.route('/api/projects/<int:project_id>/batch-import-pdfs', methods=['POST'])
+    @app.route('/api/projects/<int:project_id>/batch-import-pdf', methods=['POST'])
     @login_required
     def batch_upload_pdf(project_id):
         """Importation massive de formulaires PDF remplis (extraction de texte, parsing des questions/réponses)."""
@@ -1093,7 +1095,10 @@ def create_app():
         return jsonify({
             'success': True,
             'message': f"{batch_result['successful']} formulaires PDF importés avec succès ({batch_result['total_answers_created']} réponses créées).",
-            'batch_result': batch_result
+            'batch_result': batch_result,
+            'imported_sessions': batch_result['successful'],
+            'total_answers_created': batch_result['total_answers_created'],
+            'questionnaire_id': questionnaire_id
         })
 
     @app.route('/api/questionnaires/<int:questionnaire_id>/batch-template-excel', methods=['GET'])
@@ -1279,6 +1284,7 @@ def create_app():
         return response
 
     @app.route('/api/projects/<int:project_id>/batch-import-excel', methods=['POST'])
+    @app.route('/api/projects/<int:project_id>/batch-upload-excel', methods=['POST'])
     @login_required
     def batch_import_excel(project_id):
         """Importation massive de formulaires depuis un fichier Excel ou CSV, avec détection & création automatique du questionnaire si nécessaire."""
