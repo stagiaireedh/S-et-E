@@ -3396,20 +3396,27 @@ document.addEventListener('DOMContentLoaded', () => {
         const batchQuestSelect = document.getElementById('batch-target-questionnaire-select');
         const hubQuestSelect = document.getElementById('hub-batch-target-questionnaire-select');
         
+        let batchOptionsHtml = '<option value="auto" selected>✨ Détection & Création automatique du Questionnaire</option>';
         if (questionnaires && questionnaires.length > 0) {
-            let optionsHtml = '<option value="all">Tous les questionnaires</option>';
-            let batchOptionsHtml = '';
+            batchOptionsHtml += '<optgroup label="Ou associer à un questionnaire existant :">';
             questionnaires.forEach(q => {
-                optionsHtml += `<option value="${q.id}">${q.title}</option>`;
-                batchOptionsHtml += `<option value="${q.id}">${q.title}</option>`;
+                batchOptionsHtml += `<option value="${q.id}">📋 ${q.title}</option>`;
             });
-            if (questSelect) {
-                const curVal = questSelect.value;
-                questSelect.innerHTML = optionsHtml;
-                if (curVal) questSelect.value = curVal;
+            batchOptionsHtml += '</optgroup>';
+        }
+        if (batchQuestSelect) batchQuestSelect.innerHTML = batchOptionsHtml;
+        if (hubQuestSelect) hubQuestSelect.innerHTML = batchOptionsHtml;
+
+        if (questSelect) {
+            let optionsHtml = '<option value="all">Tous les questionnaires</option>';
+            if (questionnaires && questionnaires.length > 0) {
+                questionnaires.forEach(q => {
+                    optionsHtml += `<option value="${q.id}">${q.title}</option>`;
+                });
             }
-            if (batchQuestSelect) batchQuestSelect.innerHTML = batchOptionsHtml;
-            if (hubQuestSelect) hubQuestSelect.innerHTML = batchOptionsHtml;
+            const curVal = questSelect.value;
+            questSelect.innerHTML = optionsHtml;
+            if (curVal && curVal !== 'all') questSelect.value = curVal;
         }
 
         // 2. KPIs d'en-tête
@@ -4030,8 +4037,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnOpenBatch && modalBatch) {
         btnOpenBatch.addEventListener('click', () => {
             const bSelect = document.getElementById('batch-target-questionnaire-select');
-            if (bSelect && questionnaires) {
-                bSelect.innerHTML = questionnaires.map(q => `<option value="${q.id}">${q.title}</option>`).join('');
+            if (bSelect) {
+                let bHtml = '<option value="auto" selected>✨ Détection & Création automatique du Questionnaire</option>';
+                if (questionnaires && questionnaires.length > 0) {
+                    bHtml += '<optgroup label="Ou associer à un questionnaire existant :">';
+                    questionnaires.forEach(q => {
+                        bHtml += `<option value="${q.id}">📋 ${q.title}</option>`;
+                    });
+                    bHtml += '</optgroup>';
+                }
+                bSelect.innerHTML = bHtml;
             }
             selectedBatchFiles = [];
             selectedBatchExcelFile = null;
@@ -4129,11 +4144,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const qSelect = document.getElementById('batch-target-questionnaire-select');
-            const qId = qSelect ? qSelect.value : null;
-            if (!qId) {
-                showToast("Veuillez sélectionner le questionnaire cible.", "warning");
-                return;
-            }
+            const qId = qSelect ? (qSelect.value || 'auto') : 'auto';
 
             const progressContainer = document.getElementById('batch-pdf-progress-container');
             const progressBar = document.getElementById('batch-progress-bar');
@@ -4198,13 +4209,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (btnDownloadExcelTemplate) {
         btnDownloadExcelTemplate.addEventListener('click', () => {
-            const qSelect = document.getElementById('batch-target-questionnaire-select');
-            const qId = qSelect ? qSelect.value : null;
-            if (!qId) {
-                showToast("Veuillez sélectionner un questionnaire cible.", "warning");
+            if (!activeProjectId) {
+                showToast("Veuillez sélectionner un projet.", "warning");
                 return;
             }
-            window.open(`/api/questionnaires/${qId}/batch-template-excel`, '_blank');
+            const qSelect = document.getElementById('batch-target-questionnaire-select');
+            const qId = qSelect ? qSelect.value : null;
+            if (qId && qId !== 'auto') {
+                window.open(`/api/questionnaires/${qId}/batch-template-excel`, '_blank');
+            } else {
+                window.open(`/api/projects/${activeProjectId}/batch-excel-template`, '_blank');
+            }
         });
     }
 
@@ -4234,11 +4249,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             const qSelect = document.getElementById('batch-target-questionnaire-select');
-            const qId = qSelect ? qSelect.value : null;
-            if (!qId) {
-                showToast("Veuillez sélectionner un questionnaire cible.", "warning");
-                return;
-            }
+            const qId = qSelect ? (qSelect.value || 'auto') : 'auto';
 
             showLoader();
             const formData = new FormData();
@@ -4253,9 +4264,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = await response.json();
                 if (data.success) {
                     showToast(data.message, "success");
-                    document.dispatchEvent(new CustomEvent('dataChanged', { detail: 'batch-excel-imported' }));
+                    if (data.questionnaire_id) {
+                        activeQuestionnaireId = data.questionnaire_id;
+                    }
                     closeBatchModal();
+                    await loadQuestionnairesList();
+                    await loadDashboardData();
                     loadAdvancedStatistics(true);
+                    document.dispatchEvent(new CustomEvent('dataChanged', { detail: 'batch-excel-imported' }));
                 } else {
                     showToast(data.message || "Erreur lors de l'import Excel.", "error");
                 }
@@ -4388,11 +4404,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             const qSelect = document.getElementById('hub-batch-target-questionnaire-select');
-            const qId = qSelect ? qSelect.value : null;
-            if (!qId) {
-                showToast("Veuillez sélectionner le questionnaire cible.", "warning");
-                return;
-            }
+            const qId = qSelect ? (qSelect.value || 'auto') : 'auto';
 
             const progressContainer = document.getElementById('hub-pdf-progress-container');
             const progressBar = document.getElementById('hub-progress-bar');
@@ -4492,11 +4504,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const qSelect = document.getElementById('hub-batch-target-questionnaire-select');
             const qId = qSelect ? qSelect.value : null;
-            if (!qId) {
-                showToast("Veuillez sélectionner un questionnaire cible.", "warning");
-                return;
+            if (qId && qId !== 'auto') {
+                window.location.href = `/api/projects/${activeProjectId}/batch-excel-template?questionnaire_id=${qId}`;
+            } else {
+                window.location.href = `/api/projects/${activeProjectId}/batch-excel-template`;
             }
-            window.location.href = `/api/projects/${activeProjectId}/batch-excel-template?questionnaire_id=${qId}`;
         });
     }
 
@@ -4513,11 +4525,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             const qSelect = document.getElementById('hub-batch-target-questionnaire-select');
-            const qId = qSelect ? qSelect.value : null;
-            if (!qId) {
-                showToast("Veuillez sélectionner le questionnaire cible.", "warning");
-                return;
-            }
+            const qId = qSelect ? (qSelect.value || 'auto') : 'auto';
 
             const formData = new FormData();
             formData.append('questionnaire_id', qId);
@@ -4537,8 +4545,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         hubExcelSelectedInfo.style.display = 'block';
                         hubExcelSelectedInfo.textContent = `✅ Import réussi : ${data.imported_sessions} formulaires intégrés.`;
                     }
+                    if (data.questionnaire_id) {
+                        activeQuestionnaireId = data.questionnaire_id;
+                    }
+                    await loadQuestionnairesList();
                     await loadDashboardData();
                     loadAdvancedStatistics(true);
+                    document.dispatchEvent(new CustomEvent('dataChanged', { detail: 'batch-excel-imported' }));
                 } else {
                     showToast(data.message || "Erreur lors de l'import Excel.", "error");
                 }

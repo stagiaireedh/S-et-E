@@ -1029,13 +1029,44 @@ def create_app():
         if project.user_id != current_user.id:
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
 
-        questionnaire_id = request.form.get('questionnaire_id', type=int)
+        questionnaire_id_raw = request.form.get('questionnaire_id')
+        questionnaire_id = None
+        if questionnaire_id_raw and str(questionnaire_id_raw).lower() not in ['auto', 'new', 'none', 'null', 'undefined', '', '0']:
+            try:
+                questionnaire_id = int(questionnaire_id_raw)
+            except ValueError:
+                questionnaire_id = None
+
         if not questionnaire_id:
             first_q = Questionnaire.query.filter_by(project_id=project_id).first()
             if first_q:
                 questionnaire_id = first_q.id
             else:
-                return jsonify({'success': False, 'message': 'Veuillez d\'abord créer un questionnaire pour ce projet.'}), 400
+                # Créer un questionnaire d'accueil automatique pour accueillir les formulaires
+                first_q = Questionnaire(
+                    project_id=project_id,
+                    title=f"Questionnaire - Formulaires ({project.name})",
+                    description="Créé automatiquement pour accueillir l'ingestion des fiches d'évaluation.",
+                    status="published"
+                )
+                db.session.add(first_q)
+                db.session.flush()
+                for idx_q, (q_text, q_type, q_choices) in enumerate([
+                    ("Niveau d'accès effectif aux services au quotidien", "radio", "Très bon,Bon,Moyen,Insuffisant"),
+                    ("Qualité du dialogue et transparence de la gouvernance", "scale", "1,2,3,4,5"),
+                    ("Réactivité et efficacité des comités en cas de dysfonctionnement", "radio", "Très rapide,Rapide,Lente,Inacceptable"),
+                    ("Principales difficultés rencontrées et suggestions d'amélioration", "text", "")
+                ]):
+                    q_entry = Question(
+                        questionnaire_id=first_q.id,
+                        text=q_text,
+                        question_type=q_type,
+                        choices=q_choices,
+                        order_num=idx_q + 1
+                    )
+                    db.session.add(q_entry)
+                db.session.flush()
+                questionnaire_id = first_q.id
 
         uploaded_files = request.files.getlist('pdf_files')
         if not uploaded_files or (len(uploaded_files) == 1 and uploaded_files[0].filename == ''):
@@ -1143,24 +1174,117 @@ def create_app():
         response.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         return response
 
-    @app.route('/api/projects/<int:project_id>/batch-import-excel', methods=['POST'])
+    @app.route('/api/projects/<int:project_id>/batch-excel-template', methods=['GET'])
     @login_required
-    def batch_import_excel(project_id):
-        """Importation massive de dizaines/centaines de formulaires depuis un fichier Excel ou CSV."""
+    def download_project_batch_template_excel(project_id):
+        """Génère un gabarit Excel de saisie massive pour le projet (avec ou sans questionnaire existant)."""
         project = Project.query.get_or_404(project_id)
         if project.user_id != current_user.id:
             return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
 
-        questionnaire_id = request.form.get('questionnaire_id', type=int)
-        if not questionnaire_id:
-            first_q = Questionnaire.query.filter_by(project_id=project_id).first()
-            if first_q:
-                questionnaire_id = first_q.id
-            else:
-                return jsonify({'success': False, 'message': 'Aucun questionnaire cible trouvé.'}), 400
+        questionnaire_id = request.args.get('questionnaire_id', type=int)
+        quest = None
+        if questionnaire_id:
+            quest = Questionnaire.query.filter_by(id=questionnaire_id, project_id=project_id).first()
+        if not quest:
+            quest = Questionnaire.query.filter_by(project_id=project_id).first()
 
-        quest = Questionnaire.query.get_or_404(questionnaire_id)
-        questions = quest.questions
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from openpyxl.utils import get_column_letter
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Matrice de Données"
+        ws.views.sheetView[0].showGridLines = True
+
+        headers = [
+            "Date (AAAA-MM-JJ)",
+            "Enquêteur",
+            "Nom ou Groupe Répondant",
+            "Catégorie d'Acteur",
+            "Type Session"
+        ]
+
+        if quest and quest.questions:
+            questions_list = list(quest.questions)
+            for q in questions_list:
+                headers.append(f"Q{q.order_num} : {q.text}")
+        else:
+            questions_list = [
+                "Niveau d'accès effectif au service au quotidien",
+                "Réactivité du comité de gestion en cas de panne",
+                "Transparence des cotisations et redevabilité",
+                "Note globale sur la gouvernance (sur 5)",
+                "Principales difficultés rencontrées et suggestions"
+            ]
+            for idx_q, q_text in enumerate(questions_list, 1):
+                headers.append(f"Q{idx_q} : {q_text}")
+
+        fill_header = PatternFill(start_color="4338CA", end_color="4338CA", fill_type="solid")
+        font_header = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+
+        for col_idx, h in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_idx, value=h)
+            cell.fill = fill_header
+            cell.font = font_header
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+        sample_rows = [
+            [
+                datetime.now().strftime("%Y-%m-%d"),
+                "Mireille Dossou",
+                "Association des Usagers de Cotonou",
+                "Bénéficiaire",
+                "collectif",
+                "Bon niveau d'accès",
+                "Rapide (1 à 3 jours)",
+                "Oui tout à fait",
+                "4",
+                "Continuer l'extension vers les zones périphériques"
+            ],
+            [
+                datetime.now().strftime("%Y-%m-%d"),
+                "Koffi Mensah",
+                "Mairie - Direction des Services Techniques",
+                "Autorité Locale",
+                "individuel",
+                "Très bon accès",
+                "Très rapide (< 24h)",
+                "Oui tout à fait",
+                "5",
+                "Renforcer le suivi trimestriel conjoint"
+            ]
+        ]
+
+        for r_idx, row in enumerate(sample_rows, 2):
+            for c_idx, val in enumerate(row, 1):
+                if c_idx <= len(headers):
+                    cell = ws.cell(row=r_idx, column=c_idx, value=val)
+                    cell.font = Font(name="Calibri", size=10)
+
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            col_letter = get_column_letter(col[0].column)
+            ws.column_dimensions[col_letter].width = min(max(max_len + 3, 16), 45)
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        response = make_response(output.getvalue())
+        safe_name = secure_filename(project.name) or f"projet_{project_id}"
+        response.headers["Content-Disposition"] = f"attachment; filename=Gabarit_Collecte_Donnees_{safe_name}.xlsx"
+        response.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        return response
+
+    @app.route('/api/projects/<int:project_id>/batch-import-excel', methods=['POST'])
+    @login_required
+    def batch_import_excel(project_id):
+        """Importation massive de formulaires depuis un fichier Excel ou CSV, avec détection & création automatique du questionnaire si nécessaire."""
+        project = Project.query.get_or_404(project_id)
+        if project.user_id != current_user.id:
+            return jsonify({'success': False, 'message': 'Accès interdit.'}), 403
 
         if 'excel_file' not in request.files:
             return jsonify({'success': False, 'message': 'Aucun fichier transmis.'}), 400
@@ -1176,24 +1300,139 @@ def create_app():
             else:
                 df = pd.read_excel(file)
         except Exception as e:
-            return jsonify({'success': False, 'message': f"Erreur de lecture du fichier Excel : {e}"}), 400
+            return jsonify({'success': False, 'message': f"Erreur de lecture du fichier Excel/CSV : {e}"}), 400
 
         if df.empty:
-            return jsonify({'success': False, 'message': 'Le fichier Excel est vide.'}), 400
+            return jsonify({'success': False, 'message': 'Le fichier importé est vide.'}), 400
 
-        # Mappage des colonnes fixes
-        col_names = [str(c).strip() for c in df.columns]
-        
-        # Trouver les colonnes de métadonnées
-        date_col = next((c for c in df.columns if 'date' in str(c).lower()), None)
-        interviewer_col = next((c for c in df.columns if any(k in str(c).lower() for k in ['enquêteur', 'enqueteur', 'evaluateur'])), None)
-        respondent_col = next((c for c in df.columns if any(k in str(c).lower() for k in ['répondant', 'repondant', 'nom', 'groupe', 'interviewé'])), None)
-        actor_col = next((c for c in df.columns if any(k in str(c).lower() for k in ['catégorie', 'categorie', 'acteur'])), None)
-        type_col = next((c for c in df.columns if 'type' in str(c).lower()), None)
+        # Traitement du questionnaire_id passé
+        questionnaire_id_raw = request.form.get('questionnaire_id')
+        questionnaire_id = None
+        if questionnaire_id_raw and str(questionnaire_id_raw).lower() not in ['auto', 'new', 'none', 'null', 'undefined', '', '0']:
+            try:
+                questionnaire_id = int(questionnaire_id_raw)
+            except ValueError:
+                questionnaire_id = None
 
-        # Les colonnes restantes sont supposées être des questions
-        fixed_cols = [date_col, interviewer_col, respondent_col, actor_col, type_col]
+        quest = None
+        if questionnaire_id:
+            quest = Questionnaire.query.filter_by(id=questionnaire_id, project_id=project_id).first()
+
+        # Identifier les colonnes de métadonnées
+        date_col = next((c for c in df.columns if any(k in str(c).lower() for k in ['date', 'jour', 'horodatage', 'timestamp'])), None)
+        interviewer_col = next((c for c in df.columns if any(k in str(c).lower() for k in ['enquêteur', 'enqueteur', 'evaluateur', 'agent', 'intervieweur', 'interviewer', 'collecteur'])), None)
+        respondent_col = next((c for c in df.columns if any(k in str(c).lower() for k in ['répondant', 'repondant', 'nom', 'groupe', 'interviewé', 'beneficiaire', 'bénéficiaire', 'identifiant', 'id_repondant', 'participant', 'personne'])), None)
+        actor_col = next((c for c in df.columns if any(k in str(c).lower() for k in ['catégorie', 'categorie', 'acteur', 'profil', 'type_acteur', 'role', 'statut'])), None)
+        type_col = next((c for c in df.columns if any(k in str(c).lower() for k in ['type_session', 'type_entretien', 'mode_collecte', 'session_type', 'type d\'entretien', 'type d’entretien']) or str(c).lower().strip() in ['type', 'type entretien', 'modalité', 'modalite', 'format']), None)
+
+        fixed_cols = [c for c in [date_col, interviewer_col, respondent_col, actor_col, type_col] if c is not None]
         q_cols = [c for c in df.columns if c not in fixed_cols and str(c).strip()]
+
+        if not q_cols:
+            # Fallback : toutes les colonnes non vides sont considérées comme questions
+            q_cols = [c for c in df.columns if str(c).strip()]
+
+        created_new_questionnaire = False
+
+        # Si aucun questionnaire cible valide n'est fourni, création automatique à la volée !
+        if not quest:
+            raw_base = os.path.splitext(file.filename)[0].replace('_', ' ').replace('-', ' ').strip()
+            clean_title = f"Questionnaire - {raw_base.capitalize()}" if raw_base else f"Questionnaire - {project.name}"
+            
+            quest = Questionnaire(
+                project_id=project_id,
+                title=clean_title,
+                description=f"Généré automatiquement à partir de l'import « {file.filename} » ({len(df)} répondants, {len(q_cols)} variables).",
+                status="published"
+            )
+            db.session.add(quest)
+            db.session.flush()
+            created_new_questionnaire = True
+
+            questions = []
+            for idx_q, qc in enumerate(q_cols):
+                clean_q_text = str(qc).strip()
+                series = df[qc].dropna().astype(str).str.strip()
+                valid_vals = series[series != ''].tolist()
+                unique_vals = list(dict.fromkeys(valid_vals))
+                
+                q_type = 'text'
+                choices = ""
+                
+                all_numeric = False
+                if len(valid_vals) > 0:
+                    try:
+                        pd.to_numeric(df[qc].dropna())
+                        all_numeric = True
+                    except Exception:
+                        all_numeric = False
+                        
+                is_open_text = (
+                    any(k in clean_q_text.lower() for k in ['commentaire', 'remarque', 'suggestion', 'recommandation', 'difficulté', 'difficulte', 'avis', 'pourquoi', 'observation'])
+                    or any(len(u) > 60 for u in unique_vals)
+                    or (len(valid_vals) >= 10 and len(unique_vals) == len(valid_vals) and any(len(u) > 30 for u in unique_vals))
+                )
+
+                if all_numeric:
+                    num_series = pd.to_numeric(df[qc].dropna())
+                    if not num_series.empty and num_series.min() >= 1 and num_series.max() <= 10 and num_series.nunique() <= 10:
+                        q_type = 'scale'
+                    else:
+                        q_type = 'number'
+                elif is_open_text:
+                    q_type = 'text'
+                elif 0 < len(unique_vals) <= 12 and all(len(u) <= 100 for u in unique_vals):
+                    q_type = 'radio'
+                    choices = ",".join(unique_vals)
+                else:
+                    q_type = 'text'
+
+                new_q = Question(
+                    questionnaire_id=quest.id,
+                    text=clean_q_text,
+                    question_type=q_type,
+                    choices=choices,
+                    order_num=idx_q + 1,
+                    is_required=False
+                )
+                db.session.add(new_q)
+                db.session.flush()
+                questions.append(new_q)
+
+                block = QuestionnaireBlock(
+                    questionnaire_id=quest.id,
+                    block_type='question',
+                    order_index=idx_q + 1,
+                    content={
+                        'label': clean_q_text,
+                        'question_type': q_type,
+                        'choices': unique_vals if q_type in ['radio', 'multiple_choice'] else [],
+                        'is_required': False
+                    }
+                )
+                db.session.add(block)
+        else:
+            questions = list(quest.questions)
+            # Si le questionnaire existant n'a aucune question, peupler avec les colonnes du fichier
+            if not questions and q_cols:
+                for idx_q, qc in enumerate(q_cols):
+                    clean_q_text = str(qc).strip()
+                    series = df[qc].dropna().astype(str).str.strip()
+                    unique_vals = list(dict.fromkeys(series[series != ''].tolist()))
+                    q_type = 'radio' if 0 < len(unique_vals) <= 12 else 'text'
+                    choices = ",".join(unique_vals) if q_type == 'radio' else ""
+                    
+                    new_q = Question(
+                        questionnaire_id=quest.id,
+                        text=clean_q_text,
+                        question_type=q_type,
+                        choices=choices,
+                        order_num=idx_q + 1,
+                        is_required=False
+                    )
+                    db.session.add(new_q)
+                    db.session.flush()
+                    questions.append(new_q)
 
         created_sessions = 0
         created_answers = 0
@@ -1209,23 +1448,23 @@ def create_app():
                     pass
 
             interviewer = str(row[interviewer_col]).strip() if (interviewer_col and pd.notna(row[interviewer_col])) else "Évaluateur CSB"
-            respondent = str(row[respondent_col]).strip() if (respondent_col and pd.notna(row[respondent_col])) else "Répondant importé"
+            respondent = str(row[respondent_col]).strip() if (respondent_col and pd.notna(row[respondent_col])) else f"Répondant #{created_sessions + 1}"
             
             # Catégorie d'acteur
             raw_act = str(row[actor_col]).strip() if (actor_col and pd.notna(row[actor_col])) else "Bénéficiaire"
             act_cat = "Bénéficiaire"
-            if any(k in raw_act.lower() for k in ['autorité', 'autorite', 'maire', 'elu']):
+            if any(k in raw_act.lower() for k in ['autorité', 'autorite', 'maire', 'elu', 'élu', 'prefet', 'préfet', 'commune']):
                 act_cat = "Autorité Locale"
-            elif any(k in raw_act.lower() for k in ['équipe', 'equipe', 'csb']):
+            elif any(k in raw_act.lower() for k in ['équipe', 'equipe', 'csb', 'superviseur', 'coordinateur']):
                 act_cat = "Équipe Projet"
-            elif any(k in raw_act.lower() for k in ['partenaire', 'bailleur']):
+            elif any(k in raw_act.lower() for k in ['partenaire', 'bailleur', 'ong']):
                 act_cat = "Partenaire"
 
             sess_type = "collectif" if (type_col and pd.notna(row[type_col]) and 'collectif' in str(row[type_col]).lower()) else "individuel"
 
             session = InterviewSession(
                 project_id=project_id,
-                questionnaire_id=questionnaire_id,
+                questionnaire_id=quest.id,
                 title=f"Entretien - {respondent[:40]}",
                 interviewer=interviewer,
                 interviewee_name_or_group=respondent,
@@ -1241,19 +1480,23 @@ def create_app():
             # Remplissage des réponses
             for idx_q, q in enumerate(questions):
                 ans_text = None
-                # Recherche par nom de colonne correspondant à Q{order_num} ou au texte
-                for qc in q_cols:
-                    if f"Q{q.order_num}" in str(qc) or q.text[:20].lower() in str(qc).lower():
-                        if pd.notna(row[qc]):
-                            ans_text = str(row[qc]).strip()
-                        break
-                # Si non trouvé par nom, essayer par ordre d'apparition
-                if ans_text is None and idx_q < len(q_cols):
+                if created_new_questionnaire and idx_q < len(q_cols):
                     qc = q_cols[idx_q]
                     if pd.notna(row[qc]):
                         ans_text = str(row[qc]).strip()
+                else:
+                    # Recherche par nom de colonne ou ordre
+                    for qc in q_cols:
+                        if f"Q{q.order_num}" in str(qc) or q.text[:20].lower() in str(qc).lower():
+                            if pd.notna(row[qc]):
+                                ans_text = str(row[qc]).strip()
+                            break
+                    if ans_text is None and idx_q < len(q_cols):
+                        qc = q_cols[idx_q]
+                        if pd.notna(row[qc]):
+                            ans_text = str(row[qc]).strip()
 
-                if ans_text:
+                if ans_text is not None and ans_text != "":
                     ans = Answer(
                         session_id=session.id,
                         question_id=q.id,
@@ -1265,11 +1508,23 @@ def create_app():
         project.cached_triangulation_signature = None
         db.session.commit()
 
+        msg = (
+            f"Importation réussie : Questionnaire « {quest.title} » créé avec {len(questions)} questions, "
+            f"{created_sessions} formulaires et {created_answers} réponses importés !"
+            if created_new_questionnaire else
+            f"Importation réussie : {created_sessions} formulaires et {created_answers} réponses importés dans « {quest.title} »."
+        )
+
         return jsonify({
             'success': True,
-            'message': f"{created_sessions} formulaires importés avec succès ({created_answers} réponses créées).",
+            'message': msg,
+            'questionnaire_id': quest.id,
+            'questionnaire_title': quest.title,
             'imported_sessions': created_sessions,
-            'imported_answers': created_answers
+            'imported_answers': created_answers,
+            'created_sessions': created_sessions,
+            'created_answers': created_answers,
+            'created_questions': len(questions)
         })
 
     @app.route('/api/projects/<int:project_id>/statistics/export/excel', methods=['GET'])
